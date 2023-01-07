@@ -5,7 +5,8 @@ import torch
 import torch.nn as nn
 from torch.utils.data import TensorDataset
 from transformers import DataProcessor, InputExample, InputFeatures
-from transformers import glue_convert_examples_to_features as convert_examples_to_features
+from transformers.tokenization_utils import PreTrainedTokenizer
+from typing import Union, Optional, List
 import shutil
 
 
@@ -121,6 +122,43 @@ def save_model(model, optimizer, opt, epoch, save_file, is_best):
     if is_best:
         shutil.copyfile(save_file, 'model_best.pth')
     del state
+
+
+def convert_examples_to_features(examples: Union[List[InputExample], "tf.data.Dataset"],
+                                 tokenizer: PreTrainedTokenizer,
+                                 max_length: Optional[int] = None,
+                                 label_list=None,
+                                 output_mode=None):
+    if max_length is None:
+        max_length = tokenizer.model_max_length
+
+    label_map = {label: i for i, label in enumerate(label_list)}
+
+    def label_from_example(example: InputExample) -> Union[int, float, None]:
+        if example.label is None:
+            return None
+        if output_mode == 'classification':
+            return label_map[example.label]
+        elif output_mode == 'regression':
+            return float(example.label)
+        raise KeyError(output_mode)
+
+    labels = [label_from_example(example) for example in examples]
+
+    batch_encoding = tokenizer([(example.text_a, example.text_b) for example in examples],
+                               max_length=max_length,
+                               padding='max_length',
+                               truncation=True,
+                               return_token_type_ids=True)
+
+    features = []
+    for i in range(len(examples)):
+        inputs = {k: batch_encoding[k][i] for k in batch_encoding}
+
+        feature = InputFeatures(**inputs, label=labels[i])
+        features.append(feature)
+
+    return features
 
 
 def load_and_cache_examples(args, processor, tokenizer, evaluate, dataset):
