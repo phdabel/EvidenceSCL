@@ -1,48 +1,37 @@
-from logging import log
 import os
-import sys
 import argparse
 import time
-import math
 import pickle
-import random
 import csv
-import warnings
-from tqdm import tqdm
 from transformers import AutoTokenizer, AdamW
 import torch
-import torch.nn.functional as F
-import torch.nn as nn
 import torch.nn.parallel
 import torch.backends.cudnn as cudnn
-import torch.distributed as dist
-import torch.optim as optim
-import torch.multiprocessing as mp
 import torch.utils.data
 import torch.utils.data.distributed
 import numpy as np
 
-
-from util import NLIProcessor, adjust_learning_rate, accuracy, warmup_learning_rate, load_and_cache_examples, save_model, AverageMeter, ProgressMeter
+from util import NLIProcessor, accuracy, load_and_cache_examples, AverageMeter
 from bert_model import BertForCL, LinearClassifier, PairSupConBert
 
 label_map = ["contradiction", "entailment", "neutral"]
+
 
 def parse_option():
     parser = argparse.ArgumentParser('argument for training')
 
     # model dataset
     parser.add_argument("--max_seq_length", default=128, type=int, 
-                        help="The maximum total input sequence length after tokenization. Sequences longer than this will be truncated, sequences shorter will be padded.")
-    parser.add_argument('--model', type=str, default='BERT')
+                        help="The maximum total input sequence length after tokenization. Sequences longer "
+                             "than this will be truncated, sequences shorter will be padded.")
+    parser.add_argument('--model', type=str, default='ROBERTA')
     parser.add_argument('--dataset', type=str, default='SNLI',
-                        choices=['SNLI', 'MNLI'], help='dataset')
+                        choices=['SNLI', 'MNLI', 'MEDNLI', 'SEMEVAL23'], help='dataset')
     parser.add_argument('--data_folder', type=str, default='./datasets/preprocessed', help='path to custom dataset')
-    parser.add_argument('--batch_size', type=int, default=64,
+    parser.add_argument('--batch_size', type=int, default=512,
                         help='batch_size')
     parser.add_argument('--workers', default=32, type=int, metavar='N',
-                        help='number of data loading workers (default: 16)')
-
+                        help='number of data loading workers (default: 32)')
 
     # distribute
     parser.add_argument('--gpu', default=None, type=int,
@@ -54,6 +43,7 @@ def parse_option():
     args = parser.parse_args()
 
     return args
+
 
 def test(val_loader, model, classifier, args):
     batch_time = AverageMeter('Time', ':6.3f')
@@ -120,7 +110,6 @@ def test_mnli(val_loader, model, classifier, args):
     return res
 
 
-
 def main():
     args = parse_option()
 
@@ -128,7 +117,7 @@ def main():
         print("Use GPU: {} for training".format(args.gpu))
 
     model = PairSupConBert(BertForCL.from_pretrained(
-        "bert-base-uncased",  # Use the 12-layer BERT model, with an uncased vocab.
+        "allenai/biomed_roberta_base",  # Use the 12-layer Biomed Roberta model, with a cased vocab.
         num_labels=128,  # The number of output labels--2 for binary classification.
         # You can increase this for multi-class tasks.
         output_attentions=False,  # Whether the model returns attentions weights.
@@ -137,7 +126,7 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 
     classifier = LinearClassifier(BertForCL.from_pretrained(
-        "bert-base-uncased",  # Use the 12-layer BERT model, with an uncased vocab.
+        "allenai/biomed_roberta_base",  # Use the 12-layer Biomed Roberta model, with a cased vocab.
         num_labels=3,  # The number of output labels--2 for binary classification.
         # You can increase this for multi-class tasks.
         output_attentions=False,  # Whether the model returns attentions weights.
@@ -159,7 +148,7 @@ def main():
     cudnn.benchmark = True
 
     # construct data loader
-    if args.dataset == 'SNLI':
+    if args.dataset == 'SNLI' or args.dataset == 'MEDNLI':
         test_file = os.path.join(args.data_folder, args.dataset, "test_data.pkl")
         print("load dataset")
         with open(test_file, "rb") as pkl:
@@ -172,7 +161,6 @@ def main():
             num_workers=args.workers, pin_memory=True, sampler=test_sampler)
         acc = test(test_loader, model, classifier, args)
         print("Accuracy: {:.2f}".format(acc))
-
     elif args.dataset == 'MNLI':
         test_match = os.path.join(args.data_folder, args.dataset, "matched_test_data.pkl")
         test_mismatch = os.path.join(args.data_folder, args.dataset, "mismatched_test_data.pkl")

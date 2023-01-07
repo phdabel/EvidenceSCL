@@ -1,8 +1,9 @@
 """
 Preprocessor and dataset definition for NLI.
 """
-
+import os
 import string
+import json
 import torch
 import numpy as np
 
@@ -302,6 +303,128 @@ class Preprocessor(object):
         print("Missed words: ", missed)
 
         return embedding_matrix
+
+
+class MedNLIPreprocessor(Preprocessor):
+
+    def __init__(self,
+                 lowercase=False,
+                 ignore_punctuation=False,
+                 num_words=None,
+                 stopwords=[],
+                 labeldict={},
+                 bos=None,
+                 eos=None):
+
+        super().__init__(lowercase=lowercase,
+                         ignore_punctuation=ignore_punctuation,
+                         num_words=num_words,
+                         stopwords=stopwords,
+                         labeldict=labeldict,
+                         bos=bos,
+                         eos=eos)
+
+    def read_data(self, filepath):
+        with open(filepath, 'r', encoding='utf8') as input_data:
+
+            ids, premises, hypotheses, labels = [], [], [], []
+
+            punct_table = str.maketrans({key: " "
+                                         for key in string.punctuation})
+
+            for line in input_data.readlines():
+                instance = json.loads(line)
+                if instance['gold_label'] not in self.labeldict:
+                    continue
+
+                ids.append(instance['pairID'])
+                premise = instance['sentence1']
+                hypothesis = instance['sentence2']
+
+                if self.lowercase:
+                    premise = premise.lower()
+                    hypothesis = hypothesis.lower()
+
+                if self.ignore_punctuation:
+                    premise = premise.translate(punct_table)
+                    hypothesis = hypothesis.translate(punct_table)
+
+                premises.append([w for w in premise.rstrip().split() if w not in self.stopwords])
+                hypotheses.append([w for w in hypothesis.rstrip().split() if w not in self.stopwords])
+                labels.append(instance['gold_label'])
+
+        return dict(ids=ids,
+                    premises=premises,
+                    hypotheses=hypotheses,
+                    labels=labels)
+
+
+class SemEvalPreprocessor(Preprocessor):
+
+    def __init__(self,
+                 lowercase=False,
+                 ignore_punctuation=False,
+                 num_words=None,
+                 stopwords=[],
+                 labeldict={},
+                 bos=None,
+                 eos=None):
+
+        super().__init__(lowercase=lowercase,
+                         ignore_punctuation=ignore_punctuation,
+                         num_words=num_words,
+                         stopwords=stopwords,
+                         labeldict=labeldict,
+                         bos=bos,
+                         eos=eos)
+        self.rct_path = None
+
+    @staticmethod
+    def get_evidences(rct_filepath, section_id):
+        evidence_file = open(rct_filepath, 'r')
+        evidences = json.load(evidence_file)
+        evidence_file.close()
+        return evidences[section_id]
+
+    def read_data(self, filepath):
+        file_ = open(filepath, 'r', encoding='utf8')
+        data_ = json.load(file_)
+        file_.close()
+        if self.rct_path is None:
+            self.rct_path = os.path.join(os.path.dirname(filepath), 'CT json')
+
+        ids, premises, hypotheses, labels = [], [], [], []
+        punct_table = str.maketrans({key: " " for key in string.punctuation})
+
+        for iid, instance in data_.items():
+            if instance['Label'].lower() not in self.labeldict:
+                continue
+
+            for _kid, _kids in [('Primary_id', 'Primary_evidence_index'), ('Secondary_id', 'Secondary_evidence_index')]:
+                if _kid in instance.keys():
+                    evidences = SemEvalPreprocessor.get_evidences(os.path.join(self.rct_path, instance[_kid] + '.json'), instance['Section_id'])
+                    for i, evidence in enumerate(evidences):
+                        ids.append(iid)
+                        hypothesis = instance['Statement']
+                        if i in instance[_kids]:
+                            premise = evidence
+
+                        if self.lowercase:
+                            premise = premise.lower()
+                            hypothesis = hypothesis.lower()
+
+                        if self.ignore_punctuation:
+                            premise = premise.translate(punct_table)
+                            hypothesis = hypothesis.translate(punct_table)
+
+                        premises.append([w for w in premise.rstrip().split() if w not in self.stopwords])
+                        hypotheses.append([w for w in hypothesis.rstrip().split() if w not in self.stopwords])
+                        labels.append(instance['Label'].lower())
+
+        return dict(ids=ids,
+                    premises=premises,
+                    hypotheses=hypotheses,
+                    labels=labels)
 
 
 class NLIDataset(Dataset):

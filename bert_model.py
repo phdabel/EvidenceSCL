@@ -1,27 +1,26 @@
-from turtle import forward
-from requests import head
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import CrossEntropyLoss, MSELoss
+from transformers import RobertaPreTrainedModel, RobertaModel
 from transformers import BertPreTrainedModel, BertModel
 from util import masked_softmax, weighted_sum, sort_by_seq_lens
 
 
-class BertForCL(BertPreTrainedModel):
+class BertForCL(RobertaPreTrainedModel):
     def __init__(self, config):
         super(BertForCL, self).__init__(config)
-        #xxx 768
+        # xxx 768
         self.num_labels = config.num_labels
-        self.bert = BertModel(config)
+        self.bert = RobertaModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        #768 128
+        # 768 128
         self.fc = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
         
-    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None, 
-                labels=None):
+    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,
+                inputs_embeds=None, labels=None):
         """
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for computing the sequence classification/regression loss.
@@ -61,11 +60,12 @@ class LinearClassifier(nn.Module):
     def __init__(self, encoder, num_classes=3):
         super(LinearClassifier, self).__init__()
         dim_mlp = encoder.fc.weight.shape[1]
-        #768  3
+        # 768  3
         self.fc = nn.Linear(dim_mlp, num_classes)
     
     def forward(self, features):
         return self.fc(features)
+
 
 class PairSupConBert(nn.Module):
     def __init__(self, encoder, dropout=0.5, is_train=True):
@@ -81,29 +81,30 @@ class PairSupConBert(nn.Module):
         self.pooler = nn.Sequential(nn.Linear(4*self.dim_mlp,self.dim_mlp),
                                     encoder.bert.pooler)
         self.head = nn.Sequential(nn.Linear(self.dim_mlp,self.dim_mlp),
-                                        nn.ReLU(inplace=True))
+                                  nn.ReLU(inplace=True))
         self.fc_sup = encoder.fc
         self.fc_ce = nn.Linear(self.dim_mlp, 3)
-        
-        
-    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None):
+
+    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,
+                inputs_embeds=None):
         input_ids2 = input_ids * token_type_ids
         input_ids1 = input_ids - input_ids2
         feat1 = self.encoder(input_ids1,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds)
+                             attention_mask=attention_mask,
+                             token_type_ids=token_type_ids,
+                             position_ids=position_ids,
+                             head_mask=head_mask,
+                             inputs_embeds=inputs_embeds)
         feat2 = self.encoder(input_ids2,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds)
+                             attention_mask=attention_mask,
+                             token_type_ids=token_type_ids,
+                             position_ids=position_ids,
+                             head_mask=head_mask,
+                             inputs_embeds=inputs_embeds)
         encoded_premises = feat1[0]
         encoded_hypotheses = feat2[0]
-        attended_premises, attended_hypotheses = self.attention(encoded_premises, attention_mask, encoded_hypotheses, attention_mask)
+        attended_premises, attended_hypotheses = self.attention(encoded_premises, attention_mask, encoded_hypotheses,
+                                                                attention_mask)
         enhanced_premises = torch.cat([encoded_premises,
                                        attended_premises,
                                        encoded_premises - attended_premises,
@@ -113,14 +114,16 @@ class PairSupConBert(nn.Module):
                                          encoded_hypotheses * attended_hypotheses],dim=-1)
         projected_premises = self.projection(enhanced_premises)
         projected_hypotheses = self.projection(enhanced_hypotheses)
-        pair_embeds = torch.cat([projected_premises, projected_hypotheses, projected_premises - projected_hypotheses, projected_premises * projected_hypotheses], dim=-1)
+        pair_embeds = torch.cat([projected_premises, projected_hypotheses, projected_premises - projected_hypotheses,
+                                 projected_premises * projected_hypotheses], dim=-1)
         pair_output = self.pooler(pair_embeds)
         if self.is_train:
             feat = self.head(pair_output)
-            return F.normalize(self.fc_ce(feat),dim=1), F.normalize(self.fc_sup(feat),dim=1)
+            return F.normalize(self.fc_ce(feat), dim=1), F.normalize(self.fc_sup(feat), dim=1)
         else:
             return pair_output
-            
+
+
 class SoftmaxAttention(nn.Module):
     """
     Attention layer taking premises and hypotheses encoded by an RNN as input
@@ -179,7 +182,6 @@ class SoftmaxAttention(nn.Module):
                                            hypothesis_mask)
 
         return attended_premises, attended_hypotheses
-
 
 
 class Seq2SeqEncoder(nn.Module):

@@ -35,7 +35,6 @@ class SupConLoss(nn.Module):
         else:
             mask = mask.float().to(device)
 
-  
         contrast_feature = features
         contrast_count = 1
         anchor_feature = features

@@ -1,16 +1,12 @@
 import os
-import sys
 import argparse
 import time
 import math
 import pickle
 import random
 import warnings
-from tqdm import tqdm
-from transformers import AutoTokenizer, AdamW
+from transformers import AutoTokenizer
 import torch
-import torch.nn.functional as F
-import torch.nn as nn
 import torch.nn.parallel
 import torch.backends.cudnn as cudnn
 import torch.distributed as dist
@@ -18,25 +14,27 @@ import torch.optim as optim
 import torch.multiprocessing as mp
 import torch.utils.data
 import torch.utils.data.distributed
-import numpy as np
 
-from util import NLIProcessor, adjust_learning_rate, accuracy, warmup_learning_rate, load_and_cache_examples, save_model, AverageMeter, ProgressMeter
+from util import NLIProcessor, adjust_learning_rate, accuracy, warmup_learning_rate, load_and_cache_examples, \
+    save_model, AverageMeter, ProgressMeter
 from bert_model import BertForCL, LinearClassifier, PairSupConBert
+
 
 def parse_option():
     parser = argparse.ArgumentParser('argument for training')
 
     # model dataset
     parser.add_argument("--max_seq_length", default=128, type=int, 
-                        help="The maximum total input sequence length after tokenization. Sequences longer than this will be truncated, sequences shorter will be padded.")
-    parser.add_argument('--model', type=str, default='BERT')
+                        help="The maximum total input sequence length after tokenization. Sequences longer "
+                             "than this will be truncated, sequences shorter will be padded.")
+    parser.add_argument('--model', type=str, default='ROBERTA')
     parser.add_argument('--dataset', type=str, default='SNLI',
-                        choices=['SNLI', 'MNLI'], help='dataset')
+                        choices=['SNLI', 'MNLI', 'MEDNLI', 'SEMEVAL23'], help='dataset')
     parser.add_argument('--data_folder', type=str, default='./datasets/preprocessed', help='path to custom dataset')
 
     # training
     parser.add_argument('--workers', default=32, type=int, metavar='N',
-                        help='number of data loading workers (default: 16)')
+                        help='number of data loading workers (default: 32)')
     parser.add_argument('--epochs', default=3, type=int, metavar='N',
                         help='number of total epochs to run')
     parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
@@ -47,7 +45,7 @@ def parse_option():
                         help='use pre-trained model')
     parser.add_argument('--batch_size', type=int, default=64,
                         help='batch_size')
-    parser.add_argument('--learning_rate', type=float, default=0.00001,
+    parser.add_argument('--learning_rate', type=float, default=5e-5,
                         help='learning rate')
     parser.add_argument('--lr_decay_epochs', type=str, default='10,15',
                         help='where to decay lr, can be a list')
@@ -76,12 +74,9 @@ def parse_option():
     parser.add_argument('--gpu', default=None, type=int,
                         help='GPU id to use.')
     parser.add_argument('--multiprocessing-distributed', action='store_true',
-                        help='Use multi-processing distributed training to launch '
-                            'N processes per node, which has N GPUs. This is the '
-                            'fastest way to use PyTorch for either single node or '
-                            'multi node data parallel training')
-
-
+                        help='Use multi-processing distributed training to launch N processes per node, '
+                             'which has N GPUs. This is the fastest way to use PyTorch for either single '
+                             'node or multi node data parallel training')
     # parameters
     parser.add_argument('--temp', type=float, default=0.05,
                         help='temperature for loss function')
@@ -134,8 +129,9 @@ def main():
         random.seed(args.seed)
         torch.manual_seed(args.seed)
         cudnn.deterministic = True
-        warnings.warn('You have chosen to seed training. This will turn on the CUDNN deterministic setting, which can slow down your training considerably! You may see unexpected behavior when restarting '
-                      'from checkpoints.')
+        warnings.warn('You have chosen to seed training. This will turn on the CUDNN deterministic setting, '
+                      'which can slow down your training considerably! You may see unexpected behavior when restarting'
+                      ' from checkpoints.')
 
     if args.gpu is not None:
         warnings.warn('You have chosen a specific GPU. This will completely disable data parallelism.')
@@ -176,7 +172,7 @@ def main_worker(gpu, ngpus_per_node, args):
                                 world_size=args.world_size, rank=args.rank)
 
     model = PairSupConBert(BertForCL.from_pretrained(
-        "bert-base-uncased",  # Use the 12-layer BERT model, with an uncased vocab.
+        "allenai/biomed_roberta_base",  # Use the 12-layer Biomed Roberta model from allenai, with a cased vocab.
         num_labels=128,  # The number of output labels--2 for binary classification.
         # You can increase this for multi-class tasks.
         output_attentions=False,  # Whether the model returns attentions weights.
@@ -185,7 +181,7 @@ def main_worker(gpu, ngpus_per_node, args):
     tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 
     classifier = LinearClassifier(BertForCL.from_pretrained(
-        "bert-base-uncased",  # Use the 12-layer BERT model, with an uncased vocab.
+        "allenai/biomed_roberta_base",  # Use the 12-layer Biomed Roberta model from allenai, with a cased vocab.
         num_labels=3,  # The number of output labels--2 for binary classification.
         # You can increase this for multi-class tasks.
         output_attentions=False,  # Whether the model returns attentions weights.
@@ -209,8 +205,10 @@ def main_worker(gpu, ngpus_per_node, args):
             # ourselves based on the total number of GPUs we have
             args.batch_size = int(args.batch_size / ngpus_per_node)
             args.workers = int((args.workers + ngpus_per_node - 1) / ngpus_per_node)
-            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
-            classifier = torch.nn.parallel.DistributedDataParallel(classifier, device_ids=[args.gpu], find_unused_parameters=True)
+            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu],
+                                                              find_unused_parameters=True)
+            classifier = torch.nn.parallel.DistributedDataParallel(classifier, device_ids=[args.gpu],
+                                                                   find_unused_parameters=True)
         else:
             model.cuda()
             classifier.cuda()
@@ -226,7 +224,6 @@ def main_worker(gpu, ngpus_per_node, args):
         # DataParallel will divide and allocate batch_size to all available GPUs
         model = torch.nn.DataParallel(model).cuda()
         classifier = torch.nn.DataParallel(classifier).cuda()
-
 
     # define loss function (criterion) and optimizer
     criterion = torch.nn.CrossEntropyLoss().cuda()
@@ -258,7 +255,7 @@ def main_worker(gpu, ngpus_per_node, args):
     cudnn.benchmark = True
 
     # construct data loader
-    if args.dataset == 'SNLI':
+    if args.dataset == 'SNLI' or args.dataset == 'MEDNLI' or args.dataset == 'SEMEVAL23':
         train_file = os.path.join(args.data_folder, args.dataset, "train_data.pkl")
         validate_file = os.path.join(args.data_folder, args.dataset, "dev_data.pkl")
         print("load dataset")
@@ -293,19 +290,18 @@ def main_worker(gpu, ngpus_per_node, args):
             time1 = time.time()
             loss, train_acc = train(train_loader, model, classifier, criterion, optimizer, epoch, args)
             time2 = time.time()
-            print('epoch {}, total time {:.2f}, loss {:.2f}, accuracy {:.2f}'.format(epoch, time2 - time1, loss, train_acc))
+            print('epoch {}, total time {:.2f}, loss {:.2f}, accuracy {:.2f}'
+                  .format(epoch, time2 - time1, loss, train_acc))
             
             _, acc = validate(validate_loader, model, classifier, criterion, epoch, args)
             if acc > best_acc1:
                 best_acc1 = acc
                 print('best accuracy: {:.2f}'.format(best_acc1))
         if not args.multiprocessing_distributed or (args.multiprocessing_distributed
-            and args.rank % ngpus_per_node == 0):
+                                                    and args.rank % ngpus_per_node == 0):
             save_file = os.path.join(args.save_folder, 'classifier_last.pth')
             save_model(classifier, optimizer, args, epoch, save_file, False)
         print("best accuracy: {:.2f}".format(best_acc1))
-    
-
     elif args.dataset == 'MNLI':
         train_file = os.path.join(args.data_folder, args.dataset, "train_data.pkl")
         validate_match = os.path.join(args.data_folder, args.dataset, "matched_dev_data.pkl")
@@ -354,7 +350,8 @@ def main_worker(gpu, ngpus_per_node, args):
             time1 = time.time()
             loss, train_acc = train(train_loader, model, classifier, criterion, optimizer, epoch, args)
             time2 = time.time()
-            print('epoch {}, total time {:.2f}, loss {:.2f}, accuracy {:.2f}'.format(epoch, time2 - time1, loss, train_acc))
+            print('epoch {}, total time {:.2f}, loss {:.2f}, accuracy {:.2f}'
+                  .format(epoch, time2 - time1, loss, train_acc))
             
             _, acc1 = validate(match_loader, model, classifier, criterion, epoch, args)
             _, acc2 = validate(mismatch_loader, model, classifier, criterion, epoch, args)
@@ -366,14 +363,13 @@ def main_worker(gpu, ngpus_per_node, args):
                 best_acc1 = acc2
                 print('best accuracy: {:.2f}'.format(best_acc1))
         if not args.multiprocessing_distributed or (args.multiprocessing_distributed
-            and args.rank % ngpus_per_node == 0):
+                                                    and args.rank % ngpus_per_node == 0):
             save_file = os.path.join(args.save_folder, 'classifier_last.pth')
             save_model(classifier, optimizer, args, epoch, save_file, False)
         print("best accuracy: {:.2f}".format(best_acc1))
 
     else:
         raise ValueError('dataset not supported: {}'.format(args.dataset))
-
 
 
 def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
@@ -430,6 +426,7 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
             progress.display(idx)
     return losses.avg, top.avg
 
+
 def validate(val_loader, model, classifier, criterion, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
     losses = AverageMeter('Loss', ':.3f')
@@ -473,7 +470,6 @@ def validate(val_loader, model, classifier, criterion, epoch, args):
             if (idx + 1) % args.print_freq == 0:
                 progress.display(idx)
     return losses.avg, top.avg
-
 
 
 if __name__ == '__main__':

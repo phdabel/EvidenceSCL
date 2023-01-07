@@ -73,6 +73,7 @@ if __name__ == "__main__":
     # Default data.
     snli_url = "https://nlp.stanford.edu/projects/snli/snli_1.0.zip"
     mnli_url = "https://cims.nyu.edu/~sbowman/multinli/multinli_1.0.zip"
+    semeval2023_url = "https://github.com/ai-systems/nli4ct/raw/main/training_data.zip"
  
 
     parser = argparse.ArgumentParser(description='Download the SNLI dataset')

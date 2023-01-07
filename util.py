@@ -8,6 +8,7 @@ from transformers import DataProcessor, InputExample, InputFeatures
 from transformers import glue_convert_examples_to_features as convert_examples_to_features
 import shutil
 
+
 class NLIProcessor(DataProcessor):
     """Processor for the NLI dataset"""
 
@@ -16,9 +17,11 @@ class NLIProcessor(DataProcessor):
 
     def get_examples(self):
         examples = []
-        for i, id in enumerate(self.data["ids"]):
-            examples.append(InputExample(guid=str(id), text_a=' '.join(self.data["premises"][i]), text_b=' '.join(self.data["hypotheses"][i]),
-                    label=self.data["labels"][i]))
+        for i, id_ in enumerate(self.data["ids"]):
+            examples.append(InputExample(guid=str(id_),
+                                         text_a=' '.join(self.data["premises"][i]),
+                                         text_b=' '.join(self.data["hypotheses"][i]),
+                                         label=self.data["labels"][i]))
         return examples
     
     def get_labels(self):
@@ -94,6 +97,7 @@ def accuracy(output, target, topk=(1,)):
             correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
             res.append(correct_k.mul_(100.0 / batch_size))
         return res
+
 
 def warmup_learning_rate(args, epoch, batch_id, total_batches, optimizer):
     if args.warm and epoch <= args.warm_epochs:
@@ -217,6 +221,7 @@ def masked_softmax(tensor, mask):
 
     return result.view(*tensor_shape)
 
+
 # Code widely inspired from:
 # https://github.com/allenai/allennlp/blob/master/allennlp/nn/util.py.
 def weighted_sum(tensor, weights, mask):
@@ -241,6 +246,7 @@ def weighted_sum(tensor, weights, mask):
     mask = mask.expand_as(weighted_sum).contiguous().float()
 
     return weighted_sum * mask
+
 
 def sort_by_seq_lens(batch, sequences_lengths, descending=True):
     """

@@ -1,0 +1,13 @@
+{
+    "data_dir": "../datasets/training_data",
+    "target_dir": "../datasets/preprocessed/SEMEVAL23",
+
+    "lowercase": false,
+    "ignore_punctuation": false,
+    "num_words": null,
+    "stopwords": [],
+    "labeldict": {"entailment": 0,
+                  "contradiction": 1},
+    "bos": "_BOS_",
+    "eos": "_EOS_"
+}

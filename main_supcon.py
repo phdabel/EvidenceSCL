@@ -1,46 +1,39 @@
 import os
-from posixpath import split
-import sys
 import argparse
 import time
 import math
 import pickle
-import random
 import warnings
 import numpy as np
-from tqdm import tqdm
-from transformers import AutoTokenizer, AdamW
+from transformers import AutoTokenizer
 import torch
 import torch.nn as nn
 import torch.nn.parallel
 import torch.backends.cudnn as cudnn
 import torch.distributed as dist
-import torch.optim
 import torch.multiprocessing as mp
 import torch.utils.data
 import torch.utils.data.distributed
-
-from util import NLIProcessor, adjust_learning_rate, warmup_learning_rate, load_and_cache_examples, save_model, AverageMeter, ProgressMeter
+from torch.optim import AdamW
+from util import NLIProcessor, adjust_learning_rate, warmup_learning_rate, load_and_cache_examples, save_model, \
+    AverageMeter, ProgressMeter
 from bert_model import PairSupConBert, BertForCL
 from losses import SupConLoss
 
 
-CUDA_VISIBLE_DEVICES=2,3
-
 def parse_option():
     parser = argparse.ArgumentParser('argument for training')
-
     # model dataset
     parser.add_argument("--max_seq_length", default=128, type=int, 
-                        help="The maximum total input sequence length after tokenization. Sequences longer than this will be truncated, sequences shorter will be padded.")
-    parser.add_argument('--model', type=str, default='BERT')
+                        help="The maximum total input sequence length after tokenization. "
+                             "Sequences longer than this will be truncated, sequences shorter will be padded.")
+    parser.add_argument('--model', type=str, default='ROBERTA')
     parser.add_argument('--dataset', type=str, default='SNLI',
-                        choices=['SNLI', 'MNLI'], help='dataset')
+                        choices=['SNLI', 'MNLI', 'MEDNLI', 'SEMEVAL23'], help='dataset')
     parser.add_argument('--data_folder', type=str, default='./datasets/preprocessed', help='path to custom dataset')
-
     # training
     parser.add_argument('--workers', default=32, type=int, metavar='N',
-                        help='number of data loading workers (default: 16)')
+                        help='number of data loading workers (default: 32)')
     parser.add_argument('--epochs', default=10, type=int, metavar='N',
                         help='number of total epochs to run')
     parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
@@ -49,10 +42,10 @@ def parse_option():
                         help='path to latest checkpoint (default: none)')
     parser.add_argument('--pretrained', dest='pretrained', action='store_true',
                         help='use pre-trained model')
-    parser.add_argument('--batch_size', type=int, default=64,
-                        help='batch_size')
-    parser.add_argument('--learning_rate', type=float, default=0.00001,
-                        help='learning rate')
+    parser.add_argument('--batch_size', type=int, default=512,
+                        help='batch_size (default: 512)')
+    parser.add_argument('--learning_rate', type=float, default=5e-5,
+                        help='learning rate (default: 5e-5)')
     parser.add_argument('--lr_decay_epochs', type=str, default='5,8',
                         help='where to decay lr, can be a list')
     parser.add_argument('--lr_decay_rate', type=float, default=0.1,
@@ -63,7 +56,6 @@ def parse_option():
                         help='momentum')
     parser.add_argument('--print_freq', type=int, default=100,
                         help='print frequency')
-
     # distribute
     parser.add_argument('--world-size', default=-1, type=int,
                         help='number of nodes for distributed training')
@@ -78,24 +70,20 @@ def parse_option():
     parser.add_argument('--gpu', default=None, type=int,
                         help='GPU id to use.')
     parser.add_argument('--multiprocessing-distributed', action='store_true',
-                        help='Use multi-processing distributed training to launch '
-                            'N processes per node, which has N GPUs. This is the '
-                            'fastest way to use PyTorch for either single node or '
-                            'multi node data parallel training')
-
+                        help='Use multi-processing distributed training to launch N processes per node, '
+                             'which has N GPUs. This is the fastest way to use PyTorch for either single '
+                             'node or multi node data parallel training')
     # parameters
-    parser.add_argument('--alpha', type=float, default=1.0, help="the parameter to balance the training objective")
+    parser.add_argument('--alpha', type=float, default=1.0,
+                        help="the parameter to balance the training objective (default: 1.0)")
     parser.add_argument('--temp', type=float, default=0.05,
-                        help='temperature for loss function')
+                        help='temperature for loss function (default: 0.05)')
     parser.add_argument('--cosine', action='store_true',
                         help='using cosine annealing')
     parser.add_argument('--warm', action='store_true',
                         help='warm-up for large batch training')
-
     args = parser.parse_args()
-
     args.model_path = './save/{}_models'.format(args.dataset)
-
     iterations = args.lr_decay_epochs.split(',')
     args.lr_decay_epochs = list([])
     for it in iterations:
@@ -157,10 +145,10 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
         batch = tuple(t.cuda() for t in batch)
         inputs = {"input_ids": batch[0], "attention_mask": batch[1], "token_type_ids": batch[2]}
         feature1, feature2 = model(**inputs)
-        # print(feature1.shape, feature2.shape)
+
         loss_ce = criterion_ce(feature1, batch[3])
         loss_sup = criterion_sup(feature2, batch[3])
-        loss = loss_ce + loss_sup * args.alpha
+        loss = loss_sup + args.alpha * loss_ce
 
         # update metric
         losses.update(loss.item(), bsz)
@@ -187,8 +175,9 @@ def main():
         np.random.seed(args.seed)
         torch.manual_seed(args.seed)
         cudnn.deterministic = True
-        warnings.warn('You have chosen to seed training. This will turn on the CUDNN deterministic setting, which can slow down your training considerably! You may see unexpected behavior when restarting '
-                      'from checkpoints.')
+        warnings.warn('You have chosen to seed training. This will turn on the CUDNN deterministic setting, '
+                      'which can slow down your training considerably! You may see unexpected behavior when restarting'
+                      ' from checkpoints.')
 
     if args.gpu is not None:
         warnings.warn('You have chosen a specific GPU. This will completely disable data parallelism.')
@@ -229,14 +218,14 @@ def main_worker(gpu, ngpus_per_node, args):
                                 world_size=args.world_size, rank=args.rank)
     
     model = PairSupConBert(BertForCL.from_pretrained(
-        "bert-base-uncased",  # Use the 12-layer BERT model, with an uncased vocab.
+        "allenai/biomed_roberta_base",  # Use the 12-layer Biomed Roberta model from allenai, with a cased vocab.
         num_labels=128,  # The number of output labels--2 for binary classification.
         # You can increase this for multi-class tasks.
         output_attentions=False,  # Whether the model returns attentions weights.
         output_hidden_states=False,  # Whether the model returns all hidden-states.
     ))
 
-    tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+    tokenizer = AutoTokenizer.from_pretrained("allenai/biomed_roberta_base")
 
     if not torch.cuda.is_available():
         print('using CPU, this will be slow')
@@ -298,7 +287,11 @@ def main_worker(gpu, ngpus_per_node, args):
     if args.dataset == 'SNLI':
         train_file = os.path.join(args.data_folder, args.dataset, "train_data.pkl") 
     elif args.dataset == 'MNLI':
-        train_file = os.path.join(args.data_folder, args.dataset, "train_data.pkl") 
+        train_file = os.path.join(args.data_folder, args.dataset, "train_data.pkl")
+    elif args.dataset == 'MEDNLI':
+        train_file = os.path.join(args.data_folder, args.dataset, "train_data.pkl")
+    elif args.dataset == 'SEMEVAL23':
+        train_file = os.path.join(args.data_folder, args.dataset, "train_data.pkl")
     else:
         raise ValueError('dataset not supported: {}'.format(args.dataset))
     
@@ -330,8 +323,7 @@ def main_worker(gpu, ngpus_per_node, args):
         print('epoch {}, total time {:.2f}, loss {:.2f}'.format(epoch, time2 - time1, loss))
         
     # save the last model
-    if not args.multiprocessing_distributed or (args.multiprocessing_distributed
-                and args.rank % ngpus_per_node == 0):
+    if not args.multiprocessing_distributed or (args.multiprocessing_distributed and args.rank % ngpus_per_node == 0):
         save_file = os.path.join(args.save_folder, 'last.pth')
         save_model(model, optimizer, args, args.epochs, save_file, False)  
  
