@@ -8,6 +8,6 @@
     "stopwords": [],
     "labeldict": {"entailment": 0,
                   "contradiction": 1},
-    "bos": "_BOS_",
-    "eos": "_EOS_"
+    "bos": "<s>",
+    "eos": "</s>"
 }

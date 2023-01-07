@@ -2,8 +2,15 @@
 
 The source code of paper ["PAIR-LEVEL SUPERVISED CONTRASTIVE LEARNING FOR NATURAL LANGUAGE INFERENCE"](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9746499) published at ICASSP 2022.
 
-## Environments
-pytorch=1.8.1, transformers=4.2.1
+## Creating the environment
+```
+conda create -n pairscl python=3.9
+conda activate pairscl
+pip install -U pip
+conda install pytorch torchvision torchaudio pytorch-cuda=11.7 -c pytorch -c nvidia
+pip install transformers
+pip install wget
+```
 
 ## Fetch the data to train and test the model
 ```

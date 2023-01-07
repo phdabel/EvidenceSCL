@@ -9,6 +9,6 @@
     "labeldict": {"entailment": 0,
                   "neutral": 1,
                   "contradiction": 2},
-    "bos": "_BOS_",
-    "eos": "_EOS_"
+    "bos": "<s>",
+    "eos": "</s>"
 }
