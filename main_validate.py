@@ -178,7 +178,7 @@ def main_worker(gpu, ngpus_per_node, args):
         output_attentions=False,  # Whether the model returns attentions weights.
         output_hidden_states=False,  # Whether the model returns all hidden-states.
     ), is_train=False)
-    tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+    tokenizer = AutoTokenizer.from_pretrained("allenai/biomed_roberta_base")
 
     classifier = LinearClassifier(BertForCL.from_pretrained(
         "allenai/biomed_roberta_base",  # Use the 12-layer Biomed Roberta model from allenai, with a cased vocab.

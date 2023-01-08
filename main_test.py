@@ -28,7 +28,7 @@ def parse_option():
     parser.add_argument('--dataset', type=str, default='SNLI',
                         choices=['SNLI', 'MNLI', 'MEDNLI', 'SEMEVAL23'], help='dataset')
     parser.add_argument('--data_folder', type=str, default='./datasets/preprocessed', help='path to custom dataset')
-    parser.add_argument('--batch_size', type=int, default=512,
+    parser.add_argument('--batch_size', type=int, default=64,
                         help='batch_size')
     parser.add_argument('--workers', default=32, type=int, metavar='N',
                         help='number of data loading workers (default: 32)')
@@ -123,7 +123,7 @@ def main():
         output_attentions=False,  # Whether the model returns attentions weights.
         output_hidden_states=False,  # Whether the model returns all hidden-states.
     ), is_train=False)
-    tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+    tokenizer = AutoTokenizer.from_pretrained("allenai/biomed_roberta_base")
 
     classifier = LinearClassifier(BertForCL.from_pretrained(
         "allenai/biomed_roberta_base",  # Use the 12-layer Biomed Roberta model, with a cased vocab.

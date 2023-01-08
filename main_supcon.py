@@ -42,8 +42,8 @@ def parse_option():
                         help='path to latest checkpoint (default: none)')
     parser.add_argument('--pretrained', dest='pretrained', action='store_true',
                         help='use pre-trained model')
-    parser.add_argument('--batch_size', type=int, default=512,
-                        help='batch_size (default: 512)')
+    parser.add_argument('--batch_size', type=int, default=64,
+                        help='batch_size (default: 64)')
     parser.add_argument('--learning_rate', type=float, default=5e-5,
                         help='learning rate (default: 5e-5)')
     parser.add_argument('--lr_decay_epochs', type=str, default='5,8',
