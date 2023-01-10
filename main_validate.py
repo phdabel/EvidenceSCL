@@ -187,7 +187,7 @@ def main_worker(gpu, ngpus_per_node, args):
         output_attentions=False,  # Whether the model returns attentions weights.
         output_hidden_states=False,  # Whether the model returns all hidden-states.
     ))
-    ckpt = torch.load(args.ckpt, map_location='cpu')
+    ckpt = torch.load(args.ckpt)
     state_dict = ckpt['model']
 
     if not torch.cuda.is_available():
