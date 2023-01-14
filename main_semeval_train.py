@@ -228,7 +228,7 @@ def main_worker(gpu, ngpus_per_node, args):
     
     model = PairSupConBert(BertForCL.from_pretrained(
         "allenai/biomed_roberta_base",  # Use the 12-layer Biomed Roberta model from allenai, with a cased vocab.
-        num_labels=358,  # The number of output labels--2 for binary classification.
+        num_labels=args.max_seq_length,  # The number of output labels--2 for binary classification.
         # You can increase this for multi-class tasks.
         output_attentions=False,  # Whether the model returns attentions weights.
         output_hidden_states=False,  # Whether the model returns all hidden-states.
@@ -304,7 +304,7 @@ def main_worker(gpu, ngpus_per_node, args):
         dev_data = json.load(dev_file)
         dev_file.close()
 
-        train_dataset = convert_examples_to_features(train_data, tokenizer=tokenizer, max_length=358)
+        train_dataset = convert_examples_to_features(train_data, tokenizer=tokenizer, max_length=args.max_seq_length)
         if args.distributed:
             train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
         else:
@@ -328,7 +328,7 @@ def main_worker(gpu, ngpus_per_node, args):
         time1 = time.time()
         loss = train(train_loader, model, criterion_supcon, criterion_ce, optimizer, epoch, args)
         time2 = time.time()
-        print('epoch {}, total time {:.2f}, loss {:.2f}'.format(epoch, time2 - time1, loss))
+        print('epoch {}, total time {:.2f}, loss {:.7f}'.format(epoch, (time2 - time1), loss))
         
     # save the last model
     if not args.multiprocessing_distributed or (args.multiprocessing_distributed and args.rank % ngpus_per_node == 0):
