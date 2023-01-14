@@ -120,12 +120,12 @@ def parse_option():
 
 
 def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, args):
-    batch_time = AverageMeter('Time', ':6.3f')
-    data_time = AverageMeter('Data', ':6.3f')
-    losses = AverageMeter('Loss', ':6.3f')
-    ce_losses = AverageMeter('Cross Entropy Loss', ':6.3f')
-    scl_losses = AverageMeter('SCL Loss', ':6.3f')
-    lr_fits = AverageMeter('Learning Rate', ':6.3f')
+    batch_time = AverageMeter('Time', ':6.10f')
+    data_time = AverageMeter('Data', ':6.10f')
+    losses = AverageMeter('Loss', ':6.10f')
+    ce_losses = AverageMeter('Cross Entropy Loss', ':6.10f')
+    scl_losses = AverageMeter('SCL Loss', ':6.10f')
+    lr_fits = AverageMeter('Learning Rate', ':6.10f')
     progress = ProgressMeter(
         len(train_loader),
         [batch_time, data_time, losses, ce_losses, scl_losses, lr_fits],
