@@ -6,7 +6,7 @@ from torch.utils.data import TensorDataset
 
 import torch
 
-CT_FOLDER = os.path.join('..', 'datasets', 'training_data', 'CT json')
+CT_FOLDER = os.path.join('.', 'datasets', 'training_data', 'CT json')
 
 
 def get_evidences(rct_filepath, section_id):
