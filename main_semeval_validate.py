@@ -26,7 +26,7 @@ def parse_option():
     parser = argparse.ArgumentParser('argument for training')
 
     # model dataset
-    parser.add_argument("--max_seq_length", default=358, type=int,
+    parser.add_argument("--max_seq_length", default=128, type=int,
                         help="The maximum total input sequence length after tokenization. Sequences longer "
                              "than this will be truncated, sequences shorter will be padded.")
     parser.add_argument('--model', type=str, default='ROBERTA')
@@ -272,8 +272,8 @@ def main_worker(gpu, ngpus_per_node, args):
         dev_data = json.load(dev_file)
         dev_file.close()
 
-        train_dataset = convert_examples_to_features(train_data, tokenizer=tokenizer, max_length=args.max_seq_length)
-        validate_dataset = convert_examples_to_features(dev_data, tokenizer=tokenizer, max_length=args.max_seq_length)
+        train_dataset = convert_examples_to_features(train_data, tokenizer=tokenizer, max_length=358)
+        validate_dataset = convert_examples_to_features(dev_data, tokenizer=tokenizer, max_length=358)
         if args.distributed:
             train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
             validate_sampler = torch.utils.data.distributed.DistributedSampler(validate_dataset)
