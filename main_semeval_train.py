@@ -120,12 +120,12 @@ def parse_option():
 
 
 def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, args):
-    batch_time = AverageMeter('Time', ':6.10f')
-    data_time = AverageMeter('Data', ':6.10f')
-    losses = AverageMeter('Loss', ':6.10f')
-    ce_losses = AverageMeter('Cross Entropy Loss', ':6.10f')
-    scl_losses = AverageMeter('SCL Loss', ':6.10f')
-    lr_fits = AverageMeter('Learning Rate', ':6.10f')
+    batch_time = AverageMeter('Time', ':6.3f')
+    data_time = AverageMeter('Data', ':6.3f')
+    losses = AverageMeter('Loss', ':6.7f')
+    ce_losses = AverageMeter('Cross Entropy Loss', ':6.7f')
+    scl_losses = AverageMeter('SCL Loss', ':6.7f')
+    lr_fits = AverageMeter('Learning Rate', ':6.7f')
     progress = ProgressMeter(
         len(train_loader),
         [batch_time, data_time, losses, ce_losses, scl_losses, lr_fits],
@@ -315,6 +315,10 @@ def main_worker(gpu, ngpus_per_node, args):
 
     else:
         raise ValueError('dataset not supported: {}'.format(args.dataset))
+
+    # handle - save each epoch
+    # model_save_file = os.path.join(args.model_path, f'{args.model_name}.pt')
+    # epoch_save_file = os.path.join(args.model_path, f'{args.model_name}_epoch_data.pt')
 
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
