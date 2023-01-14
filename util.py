@@ -110,7 +110,12 @@ def warmup_learning_rate(args, epoch, batch_id, total_batches, optimizer):
             param_group['lr'] = lr
 
         return lr
-    return np.nan
+    return get_lr(optimizer)
+
+
+def get_lr(optimizer):
+    for param_group in optimizer.param_groups:
+        return param_group['lr']
 
 
 def save_model(model, optimizer, opt, epoch, save_file, is_best):

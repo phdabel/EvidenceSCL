@@ -24,7 +24,7 @@ from losses import SupConLoss
 def parse_option():
     parser = argparse.ArgumentParser('argument for training')
     # model dataset
-    parser.add_argument("--max_seq_length", default=128, type=int, 
+    parser.add_argument("--max_seq_length", default=358, type=int,
                         help="The maximum total input sequence length after tokenization. "
                              "Sequences longer than this will be truncated, sequences shorter will be padded.")
     parser.add_argument('--model', type=str, default='ROBERTA')
@@ -42,8 +42,8 @@ def parse_option():
                         help='path to latest checkpoint (default: none)')
     parser.add_argument('--pretrained', dest='pretrained', action='store_true',
                         help='use pre-trained model')
-    parser.add_argument('--batch_size', type=int, default=64,
-                        help='batch_size (default: 64)')
+    parser.add_argument('--batch_size', type=int, default=16,
+                        help='batch_size (default: 16)')
     parser.add_argument('--learning_rate', type=float, default=5e-5,
                         help='learning rate (default: 5e-5)')
     parser.add_argument('--lr_decay_epochs', type=str, default='5,8',

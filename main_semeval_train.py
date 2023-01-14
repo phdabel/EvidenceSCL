@@ -147,7 +147,6 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
 
         lr_ = warmup_learning_rate(args, epoch, idx, len(train_loader), optimizer)
 
-
         # compute loss
         batch = tuple(t.cuda() for t in batch)
         inputs = {"input_ids": batch[1], "attention_mask": batch[2], "token_type_ids": batch[3]}
