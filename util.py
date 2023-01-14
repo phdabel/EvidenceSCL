@@ -109,6 +109,8 @@ def warmup_learning_rate(args, epoch, batch_id, total_batches, optimizer):
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
 
+    return lr
+
 
 def save_model(model, optimizer, opt, epoch, save_file, is_best):
     print('==> Saving...')

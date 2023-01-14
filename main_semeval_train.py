@@ -122,10 +122,13 @@ def parse_option():
 def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
-    losses = AverageMeter('Loss', ':.3f')
+    losses = AverageMeter('Loss', ':6.3f')
+    ce_losses = AverageMeter('Cross Entropy Loss', ':6.3f')
+    scl_losses = AverageMeter('SCL Loss', ':6.3f')
+    lr_fits = AverageMeter('Learning Rate', ':6.3f')
     progress = ProgressMeter(
         len(train_loader),
-        [batch_time, data_time, losses],
+        [batch_time, data_time, losses, ce_losses, scl_losses, lr_fits],
         prefix="Epoch: [{}]".format(epoch))
 
     # switch to train mode
@@ -141,7 +144,9 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
                 batch[i] = batch[i].cuda(args.gpu, non_blocking=True)
 
         # warm-up learning rate
-        warmup_learning_rate(args, epoch, idx, len(train_loader), optimizer)
+
+        lr_ = warmup_learning_rate(args, epoch, idx, len(train_loader), optimizer)
+
 
         # compute loss
         batch = tuple(t.cuda() for t in batch)
@@ -152,7 +157,10 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
         loss_sup = criterion_sup(feature2, batch[4])
         loss = loss_sup + args.alpha * loss_ce
 
-        # update metric
+        # update metrics
+        lr_fits.update(lr_, bsz)
+        ce_losses.update(loss_ce.item(), bsz)
+        scl_losses.update(loss_sup.item(), bsz)
         losses.update(loss.item(), bsz)
         
         # AdamW

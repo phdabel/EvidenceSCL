@@ -23,7 +23,7 @@ def convert_examples_to_features(data, tokenizer, max_length=358):
     Sample = namedtuple('Sample', ('row', 'iid', 'rct', 'ev_order', 'premise', 'hypothesis', 'section', 'trial',
                                    'itype', 'valid_section', 'label'))
 
-    labeldict = {'contradiction': 0, 'entailment': 1, 'neutral': 2}
+    labeldict = {'neutral': 0, 'entailment': 1, 'contradiction': 2}
 
     not_evidences = ['Intervention', 'Eligibility', 'Adverse Events', 'Results']
 
