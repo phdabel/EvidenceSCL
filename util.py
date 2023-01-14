@@ -111,8 +111,6 @@ def warmup_learning_rate(args, epoch, batch_id, total_batches, optimizer):
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
 
-        return lr
-    return get_lr(optimizer)
 
 
 def get_lr(optimizer):

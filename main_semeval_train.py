@@ -123,12 +123,9 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':6.7f')
-    ce_losses = AverageMeter('Cross Entropy Loss', ':6.7f')
-    scl_losses = AverageMeter('SCL Loss', ':6.7f')
-    lr_fits = AverageMeter('Learning Rate', ':6.7f')
     progress = ProgressMeter(
         len(train_loader),
-        [batch_time, data_time, losses, ce_losses, scl_losses, lr_fits],
+        [batch_time, data_time, losses],
         prefix="Epoch: [{}]".format(epoch))
 
     # switch to train mode
@@ -145,7 +142,7 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
 
         # warm-up learning rate
 
-        lr_ = warmup_learning_rate(args, epoch, idx, len(train_loader), optimizer)
+        warmup_learning_rate(args, epoch, idx, len(train_loader), optimizer)
 
         # compute loss
         batch = tuple(t.cuda() for t in batch)
@@ -157,11 +154,8 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
         loss = loss_sup + args.alpha * loss_ce
 
         # update metrics
-        lr_fits.update(lr_, bsz)
-        ce_losses.update(loss_ce.item(), bsz)
-        scl_losses.update(loss_sup.item(), bsz)
         losses.update(loss.item(), bsz)
-        
+
         # AdamW
         optimizer.zero_grad()
         loss.backward()
