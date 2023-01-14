@@ -68,22 +68,23 @@ class LinearClassifier(nn.Module):
 
 
 class PairSupConBert(nn.Module):
-    def __init__(self, encoder, dropout=0.5, is_train=True):
+    def __init__(self, encoder, dropout=0.5, is_train=True, num_classes=3):
         super(PairSupConBert, self).__init__()
         self.encoder = encoder.bert
         self.dim_mlp = encoder.fc.weight.shape[1]
         self.dropout = dropout
         self.is_train = is_train
+        self.num_classes = num_classes
         self.attention = SoftmaxAttention()
         self.projection = nn.Sequential(
             nn.Linear(4*self.dim_mlp, self.dim_mlp),
             nn.ReLU())
-        self.pooler = nn.Sequential(nn.Linear(4*self.dim_mlp,self.dim_mlp),
+        self.pooler = nn.Sequential(nn.Linear(4*self.dim_mlp, self.dim_mlp),
                                     encoder.bert.pooler)
-        self.head = nn.Sequential(nn.Linear(self.dim_mlp,self.dim_mlp),
+        self.head = nn.Sequential(nn.Linear(self.dim_mlp, self.dim_mlp),
                                   nn.ReLU(inplace=True))
         self.fc_sup = encoder.fc
-        self.fc_ce = nn.Linear(self.dim_mlp, 3)
+        self.fc_ce = nn.Linear(self.dim_mlp, self.num_classes)
 
     def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,
                 inputs_embeds=None):
@@ -91,13 +92,13 @@ class PairSupConBert(nn.Module):
         input_ids1 = input_ids - input_ids2
         feat1 = self.encoder(input_ids1,
                              attention_mask=attention_mask,
-                             token_type_ids=token_type_ids,
+                             token_type_ids=None,
                              position_ids=position_ids,
                              head_mask=head_mask,
                              inputs_embeds=inputs_embeds)
         feat2 = self.encoder(input_ids2,
                              attention_mask=attention_mask,
-                             token_type_ids=token_type_ids,
+                             token_type_ids=None,
                              position_ids=position_ids,
                              head_mask=head_mask,
                              inputs_embeds=inputs_embeds)
@@ -111,7 +112,7 @@ class PairSupConBert(nn.Module):
                                        encoded_premises * attended_premises], dim=-1)
         enhanced_hypotheses = torch.cat([encoded_hypotheses, attended_hypotheses,
                                          encoded_hypotheses - attended_hypotheses,
-                                         encoded_hypotheses * attended_hypotheses],dim=-1)
+                                         encoded_hypotheses * attended_hypotheses], dim=-1)
         projected_premises = self.projection(enhanced_premises)
         projected_hypotheses = self.projection(enhanced_hypotheses)
         pair_embeds = torch.cat([projected_premises, projected_hypotheses, projected_premises - projected_hypotheses,
