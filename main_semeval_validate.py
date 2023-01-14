@@ -327,10 +327,10 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
     for idx, batch in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
-        bsz = batch[0].size(0)
+        bsz = batch[1].size(0)
 
         if args.gpu is not None:
-            for i in range(len(batch)):
+            for i in range(1, len(batch)):
                 batch[i] = batch[i].cuda(args.gpu, non_blocking=True)
 
         # warm-up learning rate
@@ -338,11 +338,11 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
 
         # compute loss
         batch = tuple(t.cuda() for t in batch)
-        inputs = {"input_ids": batch[0], "attention_mask": batch[1], "token_type_ids": batch[2]}
+        inputs = {"input_ids": batch[1], "attention_mask": batch[2], "token_type_ids": batch[3]}
         with torch.no_grad():
             features = model(**inputs)
         logits = classifier(features.detach())
-        labels = batch[3]
+        labels = batch[4]
         loss = criterion(logits.view(-1, 3), labels.view(-1))
         losses.update(loss.item(), bsz)
 
@@ -380,24 +380,24 @@ def validate(val_loader, model, classifier, criterion, epoch, args):
     with torch.no_grad():
         end = time.time()
         for idx, batch in enumerate(val_loader):
-            bsz = batch[0].size(0)
+            bsz = batch[1].size(0)
 
             if args.gpu is not None:
-                for i in range(len(batch)):
+                for i in range(1, len(batch)):
                     batch[i] = batch[i].cuda(args.gpu, non_blocking=True)
 
             # compute loss
             batch = tuple(t.cuda() for t in batch)
-            inputs = {"input_ids": batch[0], "attention_mask": batch[1], "token_type_ids": batch[2]}
-            labels = batch[3]
+            inputs = {"input_ids": batch[1], "attention_mask": batch[2], "token_type_ids": batch[3]}
+            labels = batch[4]
             features = model(**inputs)
             logits = classifier(features.detach())
-            loss = criterion(logits.view(-1, 2), labels.view(-1))
+            loss = criterion(logits.view(-1, 3), labels.view(-1))
 
             # update metric
             # print(logits)
             losses.update(loss.item(), bsz)
-            acc1 = accuracy(logits, batch[3])
+            acc1 = accuracy(logits, batch[4])
             top.update(acc1[0].item(), bsz)
 
             # measure elapsed time

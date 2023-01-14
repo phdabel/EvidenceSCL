@@ -134,10 +134,10 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
     for idx, batch in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
-        bsz = batch[0].size(0)
+        bsz = batch[1].size(0)
 
         if args.gpu is not None:
-            for i in range(len(batch)):
+            for i in range(1, len(batch)):
                 batch[i] = batch[i].cuda(args.gpu, non_blocking=True)
 
         # warm-up learning rate
@@ -145,11 +145,11 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
 
         # compute loss
         batch = tuple(t.cuda() for t in batch)
-        inputs = {"input_ids": batch[0], "attention_mask": batch[1], "token_type_ids": batch[2]}
+        inputs = {"input_ids": batch[1], "attention_mask": batch[2], "token_type_ids": batch[3]}
         feature1, feature2 = model(**inputs)
 
-        loss_ce = criterion_ce(feature1, batch[3])
-        loss_sup = criterion_sup(feature2, batch[3])
+        loss_ce = criterion_ce(feature1, batch[4])
+        loss_sup = criterion_sup(feature2, batch[4])
         loss = loss_sup + args.alpha * loss_ce
 
         # update metric
