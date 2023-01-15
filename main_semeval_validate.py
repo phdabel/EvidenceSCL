@@ -175,7 +175,7 @@ def main_worker(gpu, ngpus_per_node, args):
 
     model = PairSupConBert(BertForCL.from_pretrained(
         "allenai/biomed_roberta_base",  # Use the 12-layer Biomed Roberta model from allenai, with a cased vocab.
-        num_labels=358,  # The number of output labels--2 for binary classification.
+        num_labels=args.max_seq_length,  # The number of output labels--2 for binary classification.
         # You can increase this for multi-class tasks.
         output_attentions=False,  # Whether the model returns attentions weights.
         output_hidden_states=False,  # Whether the model returns all hidden-states.
