@@ -15,7 +15,7 @@ import torch.multiprocessing as mp
 import torch.utils.data
 import torch.utils.data.distributed
 
-from preprocessing.semeval_dataset import convert_examples_to_features
+from preprocessing.semeval_dataset import convert_examples_to_features, convert_examples_to_features_balanced_dataset
 from util import adjust_learning_rate, accuracy, warmup_learning_rate, \
     save_model, AverageMeter, ProgressMeter
 from torch.utils.data import DataLoader
@@ -272,8 +272,12 @@ def main_worker(gpu, ngpus_per_node, args):
         dev_data = json.load(dev_file)
         dev_file.close()
 
-        train_dataset = convert_examples_to_features(train_data, tokenizer=tokenizer, max_length=args.max_seq_length)
-        validate_dataset = convert_examples_to_features(dev_data, tokenizer=tokenizer, max_length=args.max_seq_length)
+        train_dataset = convert_examples_to_features_balanced_dataset(train_data,
+                                                                      tokenizer=tokenizer,
+                                                                      max_length=args.max_seq_length)
+        validate_dataset = convert_examples_to_features_balanced_dataset(dev_data,
+                                                                         tokenizer=tokenizer,
+                                                                         max_length=args.max_seq_length)
         if args.distributed:
             train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
             validate_sampler = torch.utils.data.distributed.DistributedSampler(validate_dataset)
