@@ -155,7 +155,9 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
 
         # update metrics
         print("----")
-        print(loss.item())
+        print("CE Loss %.6f", loss_ce.item())
+        print("SCL Loss %.6f", loss_sup.item())
+        print("Total Loss %.6f", loss.item())
         print(bsz)
         losses.update(loss.item(), bsz)
 
