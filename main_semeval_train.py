@@ -273,7 +273,7 @@ def main_worker(gpu, ngpus_per_node, args):
                 loc = 'cuda:{}'.format(args.gpu)
                 checkpoint = torch.load(args.resume, map_location=loc)
             args.start_epoch = checkpoint['epoch']
-            best_acc1 = checkpoint['best_acc1']
+            best_acc1 = checkpoint['best_acc1'] if 'best_acc1' in checkpoint else None
             if args.gpu is not None:
                 # best_acc1 may be from a checkpoint from a different GPU
                 best_acc1 = best_acc1.to(args.gpu)
@@ -289,14 +289,14 @@ def main_worker(gpu, ngpus_per_node, args):
     # construct data loader
     if args.dataset == 'SEMEVAL23':
         train_filename = os.path.join(args.data_folder, 'training_data', "train.json")
-        dev_filename = os.path.join(args.data_folder, 'training_data', "dev.json")
+        # dev_filename = os.path.join(args.data_folder, 'training_data', "dev.json")
 
         train_file = open(train_filename, 'r')
         train_data = json.load(train_file)
         train_file.close()
-        dev_file = open(dev_filename, 'r')
-        dev_data = json.load(dev_file)
-        dev_file.close()
+        # dev_file = open(dev_filename, 'r')
+        # dev_data = json.load(dev_file)
+        # dev_file.close()
 
         train_dataset = convert_examples_to_features(train_data, tokenizer=tokenizer, max_length=args.max_seq_length)
         if args.distributed:
@@ -304,7 +304,7 @@ def main_worker(gpu, ngpus_per_node, args):
         else:
             train_sampler = None
 
-        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
+        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=False,
                                   num_workers=args.workers, pin_memory=True, sampler=train_sampler)
 
     else:

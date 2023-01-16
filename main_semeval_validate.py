@@ -247,7 +247,7 @@ def main_worker(gpu, ngpus_per_node, args):
                 loc = 'cuda:{}'.format(args.gpu)
                 checkpoint = torch.load(args.resume, map_location=loc)
             args.start_epoch = checkpoint['epoch']
-            best_acc1 = checkpoint['best_acc1']
+            best_acc1 = checkpoint['best_acc1'] if 'best_acc1' in checkpoint else None
             if args.gpu is not None:
                 # best_acc1 may be from a checkpoint from a different GPU
                 best_acc1 = best_acc1.to(args.gpu)
@@ -272,8 +272,8 @@ def main_worker(gpu, ngpus_per_node, args):
         dev_data = json.load(dev_file)
         dev_file.close()
 
-        train_dataset = convert_examples_to_features(train_data, tokenizer=tokenizer, max_length=358)
-        validate_dataset = convert_examples_to_features(dev_data, tokenizer=tokenizer, max_length=358)
+        train_dataset = convert_examples_to_features(train_data, tokenizer=tokenizer, max_length=args.max_seq_length)
+        validate_dataset = convert_examples_to_features(dev_data, tokenizer=tokenizer, max_length=args.max_seq_length)
         if args.distributed:
             train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
             validate_sampler = torch.utils.data.distributed.DistributedSampler(validate_dataset)
@@ -281,16 +281,16 @@ def main_worker(gpu, ngpus_per_node, args):
             train_sampler = None
             validate_sampler = None
 
-        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
+        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=False,
                                   num_workers=args.workers, pin_memory=True, sampler=train_sampler)
-        validate_loader = DataLoader(validate_dataset, batch_size=args.batch_size, shuffle=(validate_sampler is None),
+        validate_loader = DataLoader(validate_dataset, batch_size=args.batch_size, shuffle=False,
                                      num_workers=args.workers, pin_memory=True, sampler=validate_sampler)
 
         for epoch in range(args.start_epoch, args.epochs):
             if args.distributed:
                 train_sampler.set_epoch(epoch)
                 validate_sampler.set_epoch(epoch)
-                
+
             adjust_learning_rate(args, optimizer, epoch)
 
             time1 = time.time()
