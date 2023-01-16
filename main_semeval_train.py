@@ -154,6 +154,9 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
         loss = loss_sup + args.alpha * loss_ce
 
         # update metrics
+        print("----")
+        print(loss.item())
+        print(bsz)
         losses.update(loss.item(), bsz)
 
         # AdamW
@@ -274,6 +277,7 @@ def main_worker(gpu, ngpus_per_node, args):
                 checkpoint = torch.load(args.resume, map_location=loc)
             args.start_epoch = checkpoint['epoch']
             best_acc1 = checkpoint['best_acc1'] if 'best_acc1' in checkpoint else None
+            print("Best ACC %.2f", best_acc1)
             if args.gpu is not None:
                 # best_acc1 may be from a checkpoint from a different GPU
                 best_acc1 = best_acc1.to(args.gpu)
