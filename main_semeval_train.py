@@ -156,6 +156,11 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
         # update metrics
         losses.update(loss.item(), bsz)
 
+        if np.isnan(loss.item()):
+            print("------")
+            print(batch[0])
+            print("------")
+
         # AdamW
         optimizer.zero_grad()
         loss.backward()
