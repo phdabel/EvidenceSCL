@@ -43,6 +43,8 @@ class AverageMeter(object):
         self.count = 0
 
     def update(self, val, n=1):
+        if np.isnan(val):
+            val = self.val - self.avg
         self.val = val
         self.sum += val * n
         self.count += n

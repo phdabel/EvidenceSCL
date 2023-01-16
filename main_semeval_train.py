@@ -154,11 +154,6 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
         loss = loss_sup + args.alpha * loss_ce
 
         # update metrics
-        print("----")
-        print("CE Loss %.6f", loss_ce.item())
-        print("SCL Loss %.6f", loss_sup.item())
-        print("Total Loss %.6f", loss.item())
-        print(bsz)
         losses.update(loss.item(), bsz)
 
         # AdamW
