@@ -285,9 +285,9 @@ def main_worker(gpu, ngpus_per_node, args):
             train_sampler = None
             validate_sampler = None
 
-        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=False,
+        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
                                   num_workers=args.workers, pin_memory=True, sampler=train_sampler)
-        validate_loader = DataLoader(validate_dataset, batch_size=args.batch_size, shuffle=False,
+        validate_loader = DataLoader(validate_dataset, batch_size=args.batch_size, shuffle=True,
                                      num_workers=args.workers, pin_memory=True, sampler=validate_sampler)
 
         for epoch in range(args.start_epoch, args.epochs):

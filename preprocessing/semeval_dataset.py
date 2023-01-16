@@ -17,7 +17,7 @@ def get_evidences(rct_filepath, section_id):
     return evidences[section_id]
 
 
-def convert_examples_to_features_balanced_dataset(data, tokenizer, max_length=358):
+def convert_examples_to_features_balanced_dataset(data, tokenizer, max_length=128):
     evidence_struct = dict(iid=list(), rct=list(), trial=list(), valid_section=list(), section=list(), itype=list(),
                            sentence1=list(), order_=list(), sentence2=list(), label=list(), class_=list())
 
