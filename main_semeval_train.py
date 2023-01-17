@@ -151,7 +151,7 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
 
         loss_ce = criterion_ce(feature1, batch[4])
         loss_sup = criterion_sup(feature2, batch[4])
-        loss = loss_sup + args.alpha * loss_ce
+        loss = loss_ce + args.alpha * loss_sup
 
         # update metrics
         losses.update(loss.item(), bsz)
