@@ -15,7 +15,7 @@ import torch.multiprocessing as mp
 import torch.utils.data
 import torch.utils.data.distributed
 
-from preprocessing.semeval_dataset import convert_examples_to_features, convert_examples_to_features_balanced_dataset
+from preprocessing.semeval_dataset import convert_examples_to_features_balanced_dataset
 from util import adjust_learning_rate, accuracy, warmup_learning_rate, \
     save_model, AverageMeter, ProgressMeter
 from torch.utils.data import DataLoader
@@ -397,15 +397,15 @@ def validate(val_loader, model, classifier, criterion, epoch, args):
             # compute loss
             batch = tuple(t.cuda() for t in batch)
             inputs = {"input_ids": batch[1], "attention_mask": batch[2], "token_type_ids": batch[3]}
-            labels = batch[5]
+            classes = batch[5]
             features = model(**inputs)
             logits = classifier(features.detach())
-            loss = criterion(logits.view(-1, 2), labels.view(-1))
+            loss = criterion(logits.view(-1, 2), classes.view(-1))
 
             # update metric
             # print(logits)
             losses.update(loss.item(), bsz)
-            acc1 = accuracy(logits, batch[5])
+            acc1 = accuracy(logits, classes)
             top.update(acc1[0].item(), bsz)
 
             # measure elapsed time

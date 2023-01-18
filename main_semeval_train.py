@@ -15,7 +15,7 @@ import torch.multiprocessing as mp
 import torch.utils.data
 import torch.utils.data.distributed
 from torch.optim import AdamW
-from preprocessing.semeval_dataset import convert_examples_to_features, convert_examples_to_features_balanced_dataset
+from preprocessing.semeval_dataset import convert_examples_to_features_balanced_dataset
 from util import adjust_learning_rate, warmup_learning_rate, save_model, \
     AverageMeter, ProgressMeter
 from torch.utils.data import DataLoader
