@@ -58,9 +58,9 @@ def convert_examples_to_features_balanced_dataset(data, tokenizer, max_length=12
 
     last_iid = None
     dataset_items = list()
-    for row, evidence in evidence_df.sort_values(by=['iid', 'section', 'trial', 'label', 'order_'],
+    for row, evidence in evidence_df.sort_values(by=['iid', 'section', 'trial', 'label_', 'order_'],
                                                  ascending=[True, True, True, False, True]).iterrows():
-        if evidence.label == 1:
+        if evidence.label_ == 1:
             # reset for new iid
             if last_iid is None or evidence.iid != last_iid:
                 true_label = 0
@@ -79,7 +79,7 @@ def convert_examples_to_features_balanced_dataset(data, tokenizer, max_length=12
                                         evidence_label=evidence.label_,
                                         class_label=classdict[evidence.class_]))
             true_label += 1
-        elif evidence.label == -1 and last_iid == evidence.iid:
+        elif evidence.label_ == 0 and last_iid == evidence.iid:
             if neg_label is None:
                 neg_label = np.ceil(true_label * 1)
 
