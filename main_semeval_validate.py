@@ -185,11 +185,12 @@ def main_worker(gpu, ngpus_per_node, args):
 
     classifier = LinearClassifier(BertForCL.from_pretrained(
         "allenai/biomed_roberta_base",  # Use the 12-layer Biomed Roberta model from allenai, with a cased vocab.
-        num_labels=3,  # The number of output labels--2 for binary classification.
+        num_labels=2,  # The number of output labels--2 for binary classification.
         # You can increase this for multi-class tasks.
         output_attentions=False,  # Whether the model returns attentions weights.
         output_hidden_states=False,  # Whether the model returns all hidden-states.
-    ))
+    ), num_classes=2)
+
     ckpt = torch.load(args.ckpt)
     state_dict = ckpt['model']
 
@@ -349,12 +350,12 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
         with torch.no_grad():
             features = model(**inputs)
         logits = classifier(features.detach())
-        labels = batch[4]
-        loss = criterion(logits.view(-1, 3), labels.view(-1))
+        classes = batch[5]
+        loss = criterion(logits.view(-1, model.num_classes), classes.view(-1))
         losses.update(loss.item(), bsz)
 
         # update metric
-        acc1 = accuracy(logits, labels)
+        acc1 = accuracy(logits, classes)
         top.update(acc1[0].item(), bsz)
 
         # AdamW
@@ -399,7 +400,7 @@ def validate(val_loader, model, classifier, criterion, epoch, args):
             labels = batch[4]
             features = model(**inputs)
             logits = classifier(features.detach())
-            loss = criterion(logits.view(-1, 3), labels.view(-1))
+            loss = criterion(logits.view(-1, model.num_classes), labels.view(-1))
 
             # update metric
             # print(logits)

@@ -19,13 +19,12 @@ def get_evidences(rct_filepath, section_id):
 
 def convert_examples_to_features_balanced_dataset(data, tokenizer, max_length=128):
     evidence_struct = dict(iid=list(), rct=list(), trial=list(), valid_section=list(), section=list(), itype=list(),
-                           sentence1=list(), order_=list(), sentence2=list(), label=list(), class_=list())
+                           sentence1=list(), order_=list(), sentence2=list(), label_=list(), class_=list())
 
     Sample = namedtuple('Sample', ('row', 'iid', 'rct', 'ev_order', 'premise', 'hypothesis', 'section', 'trial',
-                                   'itype', 'label'))
+                                   'itype', 'evidence_label', 'class_label'))
 
-    labeldict = {'neutral': 0, 'entailment': 1, 'contradiction': 2}
-
+    classdict = {'contradiction': 0, 'entailment': 1}
     not_evidences = ['Intervention', 'Eligibility', 'Adverse Events', 'Results']
 
     for iid, instance in data.items():
@@ -46,13 +45,13 @@ def convert_examples_to_features_balanced_dataset(data, tokenizer, max_length=12
                             evidence_struct['order_'].append(i)
                             evidence_struct['sentence1'].append(evidence)
                             evidence_struct['class_'].append(instance['Label'].lower())
-                            evidence_struct['label'].append(1)
+                            evidence_struct['label_'].append(1)
                             evidence_struct['valid_section'].append(is_evidence)
                         else:
                             evidence_struct['order_'].append(i)
                             evidence_struct['sentence1'].append(evidence)
-                            evidence_struct['class_'].append('neutral')
-                            evidence_struct['label'].append(-1)
+                            evidence_struct['class_'].append(instance['Label'].lower())
+                            evidence_struct['label_'].append(0)
                             evidence_struct['valid_section'].append(False)
 
     evidence_df = pd.DataFrame(evidence_struct)
@@ -77,11 +76,12 @@ def convert_examples_to_features_balanced_dataset(data, tokenizer, max_length=12
                                         section=evidence.section,
                                         trial=evidence.trial,
                                         itype=evidence.itype,
-                                        label=labeldict[evidence.class_]))
+                                        evidence_label=evidence.label_,
+                                        class_label=classdict[evidence.class_]))
             true_label += 1
         elif evidence.label == -1 and last_iid == evidence.iid:
             if neg_label is None:
-                neg_label = np.ceil(true_label * 0.5)
+                neg_label = np.ceil(true_label * 1)
 
             if neg_label > 0:
                 dataset_items.append(Sample(row=row,
@@ -93,7 +93,8 @@ def convert_examples_to_features_balanced_dataset(data, tokenizer, max_length=12
                                             section=evidence.section,
                                             trial=evidence.trial,
                                             itype=evidence.itype,
-                                            label=labeldict[evidence.class_]))
+                                            evidence_label=evidence.label_,
+                                            class_label=classdict[evidence.class_]))
                 neg_label -= 1
             else:
                 continue
@@ -107,13 +108,15 @@ def convert_examples_to_features_balanced_dataset(data, tokenizer, max_length=12
                                          return_attention_mask=True,
                                          return_tensors='pt')
 
-    all_labels = torch.tensor([sample.label for idx, sample in enumerate(dataset_items)], dtype=torch.long)
+    all_evidence_labels = torch.tensor([sample.evidence_label for idx, sample in enumerate(dataset_items)], dtype=torch.long)
+    all_class_labels = torch.tensor([sample.class_label for idx, sample in enumerate(dataset_items)], dtype=torch.long)
     all_ids = torch.tensor([sample.row for idx, sample in enumerate(dataset_items)], dtype=torch.long)
     dataset = TensorDataset(all_ids,
                             inputs['input_ids'],
                             inputs['attention_mask'],
                             inputs['token_type_ids'],
-                            all_labels)
+                            all_evidence_labels,
+                            all_class_labels)
     return dataset
 
 

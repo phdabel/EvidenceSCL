@@ -149,9 +149,9 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
         inputs = {"input_ids": batch[1], "attention_mask": batch[2], "token_type_ids": batch[3]}
         feature1, feature2 = model(**inputs)
 
-        loss_ce = criterion_ce(feature1, batch[4])
         loss_sup = criterion_sup(feature2, batch[4])
-        loss = loss_ce + args.alpha * loss_sup
+        loss_ce = criterion_ce(feature1, batch[5])
+        loss = args.alpha * loss_sup + loss_ce
 
         # update metrics
         losses.update(loss.item(), bsz)
@@ -222,11 +222,11 @@ def main_worker(gpu, ngpus_per_node, args):
     
     model = PairSupConBert(BertForCL.from_pretrained(
         "allenai/biomed_roberta_base",  # Use the 12-layer Biomed Roberta model from allenai, with a cased vocab.
-        num_labels=args.max_seq_length,  # The number of output labels--2 for binary classification.
+        num_labels=args.max_seq_length,  # max sequence length (128)
         # You can increase this for multi-class tasks.
         output_attentions=False,  # Whether the model returns attentions weights.
         output_hidden_states=False,  # Whether the model returns all hidden-states.
-    ))
+    ), num_classes=2)  # number of classes (0 - contradiction, 1 - entailment)
 
     tokenizer = AutoTokenizer.from_pretrained("allenai/biomed_roberta_base")
 
