@@ -351,7 +351,7 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
             features = model(**inputs)
         logits = classifier(features.detach())
         classes = batch[5]
-        loss = criterion(logits.view(-1, model.num_classes), classes.view(-1))
+        loss = criterion(logits.view(-1, model.num_labels), classes.view(-1))
         losses.update(loss.item(), bsz)
 
         # update metric
@@ -400,7 +400,7 @@ def validate(val_loader, model, classifier, criterion, epoch, args):
             labels = batch[4]
             features = model(**inputs)
             logits = classifier(features.detach())
-            loss = criterion(logits.view(-1, model.num_classes), labels.view(-1))
+            loss = criterion(logits.view(-1, model.num_labels), labels.view(-1))
 
             # update metric
             # print(logits)
