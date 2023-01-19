@@ -10,11 +10,142 @@ import torch
 CT_FOLDER = os.path.join('.', 'datasets', 'training_data', 'CT json')
 
 
+def get_segment_points(feature: torch.Tensor, eos_token_id, sep_token_id):
+    seg_begining_1_idx = 0
+    seg_ending_idxs = (feature == eos_token_id).nonzero().flatten().detach().numpy()
+    seg_separator_idxs = (feature == sep_token_id).nonzero().flatten().detach().numpy()
+
+    seg_ending_1_idx = seg_ending_idxs[0]
+    seg_begining_2_idx = seg_ending_idxs[1]
+    seg_ending_2_idx = seg_ending_idxs[2]
+
+    return seg_begining_1_idx, seg_ending_1_idx, seg_begining_2_idx, seg_ending_2_idx
+
+
+def get_token_type_ids(features: torch.Tensor, eos_token_id, sep_token_id, max_length=128):
+    all_token_type_ids = []
+    for row, feature in enumerate(features):
+        seg_begining_1_idx, seg_ending_1_idx, seg_begining_2_idx, seg_ending_2_idx = get_segment_points(feature,
+                                                                                                        eos_token_id,
+                                                                                                        sep_token_id)
+        pair_attention_ = (seg_ending_1_idx - (seg_begining_1_idx - 1)) * [0] + (
+                    seg_ending_2_idx - (seg_begining_2_idx - 1)) * [1]
+        padding_ = (max_length - len(pair_attention_)) * [0]
+
+        all_token_type_ids.append(pair_attention_ + padding_)
+
+    return torch.tensor(all_token_type_ids)
+
+
+def get_masked_features(features: torch.Tensor, attention_mask: torch.Tensor, eos_token_id, sep_token_id, pad_token_id, max_length=128):
+    hypotheses = list()
+    hypotheses_mask = list()
+    premises = list()
+    premises_mask = list()
+    token_type_ids = get_token_type_ids(features, eos_token_id, sep_token_id, max_length)
+    for row, feature in enumerate(features):
+        seg_begining_1_idx, seg_ending_1_idx, seg_begining_2_idx, seg_ending_2_idx = get_segment_points(feature, eos_token_id, sep_token_id)
+
+        # masked segment 2
+        seg2_mask_sum = (token_type_ids[row]*pad_token_id)
+        masked_seg2 = (feature*(1-token_type_ids[row])) + seg2_mask_sum
+
+        # masked segment 1
+        seg_partial_mask = (seg_ending_1_idx - seg_begining_1_idx + 1) * [pad_token_id] + (seg_ending_2_idx - seg_begining_2_idx + 1) * [0]
+        seg1_padding = (max_length - len(seg_partial_mask)) * [1]
+        seg1_mask_sum = torch.tensor(seg_partial_mask + seg1_padding)
+        masked_seg1 = (token_type_ids[row]*feature)+seg1_mask_sum
+
+        premises.append(masked_seg2.unsqueeze(0))# sentence 1 (sentence 2 with mask)
+        hypotheses.append(masked_seg1.unsqueeze(0))# sentence 2 (sentence 1 with mask)
+        premises_mask.append((attention_mask[row]*(1-token_type_ids[row])).unsqueeze(0))
+        hypotheses_mask.append((attention_mask[row]*token_type_ids[row]).unsqueeze(0))
+
+    return {'hypotheses': torch.cat(hypotheses),
+            'hypotheses_mask': torch.cat(hypotheses_mask),
+            'premises': torch.cat(premises),
+            'premises_mask': torch.cat(premises_mask)}
+
+
 def get_evidences(rct_filepath, section_id):
     evidence_file = open(os.path.join(CT_FOLDER, rct_filepath + '.json'), 'r')
     evidences = json.load(evidence_file)
     evidence_file.close()
     return evidences[section_id]
+
+
+def get_balanced_dataset(data, tokenizer, max_length=128):
+    # agrupa por rótulo de classe
+    g_data = data.groupby('class_label')
+    grouped_data = g_data.apply(lambda x: x.sample(g_data.size().min()))
+
+    def map_index(_grouped_data):
+        # maps row ids per class label
+        _idx_map = dict(contradiction=list(), neutral=list(), entailment=list())
+        for _idx in _grouped_data.index.to_list():
+            _idx_map[_idx[0]].append(_idx)
+
+        return idx_map
+
+    idx_map = map_index(grouped_data)
+    # monta o dataset intercalando uma instância de cada classe
+    dataset_items = list()
+
+    Sample = namedtuple('Sample', ('row', 'iid', 'rct', 'ev_order', 'premise', 'hypothesis', 'section',
+                                   'valid_section', 'trial', 'itype', 'evidence_label', 'class_label'))
+
+    classdict = {'contradiction': -1, 'neutral': 0, 'entailment': 1}
+    rclassdict = {-1: 'contradiction', 0: 'neutral', 1: 'entailment'}
+
+    while not len(idx_map['contradiction']) == len(idx_map['neutral']) == len(idx_map['entailment']) == 0:
+        try:
+            for key in idx_map.keys():
+                idx = idx_map[key].pop()
+                row = grouped_data[grouped_data.index == idx]
+                assert len(row.iid.values) == 1, "Mais de uma linha"
+                dataset_items.append(Sample(
+                    row=idx[1],
+                    iid=row.iid.values[0],
+                    rct=row.rct.values[0],
+                    ev_order=row.order_.values[0],
+                    premise=row.premises.values[0],
+                    hypothesis=row.hypotheses.values[0],
+                    section=row.section.values[0],
+                    valid_section=row.valid_section.values[0],
+                    trial=row.trial.values[0],
+                    itype=row.itype.values[0],
+                    evidence_label=row.evidence_label.values[0],
+                    class_label=classdict[row.class_label.values[0]]
+                ))
+        except IndexError:
+            continue
+
+    inputs = tokenizer.batch_encode_plus(
+        [(sample.premise, sample.hypothesis) for idx, sample in enumerate(dataset_items)],
+        add_special_tokens=True,
+        padding='max_length',
+        truncation=True,
+        max_length=max_length,
+        return_token_type_ids=False,
+        return_attention_mask=True,
+        return_tensors='pt')
+
+    all_evidence_labels = torch.tensor([sample.evidence_label for idx, sample in enumerate(dataset_items)],
+                                       dtype=torch.long)
+    all_class_labels = torch.tensor([sample.class_label for idx, sample in enumerate(dataset_items)], dtype=torch.long)
+    all_ids = torch.tensor([sample.row for idx, sample in enumerate(dataset_items)], dtype=torch.long)
+    all_token_type_ids = get_token_type_ids(inputs['input_ids'],
+                                            eos_token_id=tokenizer.eos_token_id,
+                                            sep_token_id=tokenizer.sep_token_id,
+                                            max_length=max_length)
+    dataset = TensorDataset(all_ids,
+                            inputs['input_ids'],
+                            inputs['attention_mask'],
+                            all_token_type_ids,
+                            all_evidence_labels,
+                            all_class_labels)
+
+    return dataset
 
 
 def convert_examples_to_features_balanced_dataset(data, tokenizer, max_length=128):
@@ -31,7 +162,7 @@ def convert_examples_to_features_balanced_dataset(data, tokenizer, max_length=12
         for _kid, _kids in [('Primary_id', 'Primary_evidence_index'), ('Secondary_id', 'Secondary_evidence_index')]:
             if _kid in instance.keys():
                 for section_id in not_evidences:
-                    is_evidence = section_id == instance['Section_id']
+                    is_evidence_section = section_id == instance['Section_id']
                     candidates = get_evidences(instance[_kid], section_id)
                     for i, evidence in enumerate(candidates):
                         # is evidence section condition
@@ -41,16 +172,16 @@ def convert_examples_to_features_balanced_dataset(data, tokenizer, max_length=12
                         evidence_struct['section'].append(instance['Section_id'])
                         evidence_struct['sentence2'].append(instance['Statement'])
                         evidence_struct['trial'].append(_kid.split('_')[0])
-                        if is_evidence and i in instance[_kids]:
+                        if is_evidence_section and i in instance[_kids]:
                             evidence_struct['order_'].append(i)
                             evidence_struct['sentence1'].append(evidence)
                             evidence_struct['class_'].append(instance['Label'].lower())
                             evidence_struct['label_'].append(1)
-                            evidence_struct['valid_section'].append(is_evidence)
+                            evidence_struct['valid_section'].append(is_evidence_section)
                         else:
                             evidence_struct['order_'].append(i)
                             evidence_struct['sentence1'].append(evidence)
-                            evidence_struct['class_'].append(instance['Label'].lower())
+                            evidence_struct['class_'].append('neutral')
                             evidence_struct['label_'].append(0)
                             evidence_struct['valid_section'].append(False)
 

@@ -5,6 +5,7 @@ import math
 import json
 import warnings
 import numpy as np
+import pandas as pd
 from transformers import AutoTokenizer
 import torch
 import torch.nn as nn
@@ -15,7 +16,7 @@ import torch.multiprocessing as mp
 import torch.utils.data
 import torch.utils.data.distributed
 from torch.optim import AdamW
-from preprocessing.semeval_dataset import convert_examples_to_features_balanced_dataset
+from preprocessing.semeval_dataset import get_balanced_dataset
 from util import adjust_learning_rate, warmup_learning_rate, save_model, \
     AverageMeter, ProgressMeter
 from torch.utils.data import DataLoader
@@ -226,7 +227,7 @@ def main_worker(gpu, ngpus_per_node, args):
         # You can increase this for multi-class tasks.
         output_attentions=False,  # Whether the model returns attentions weights.
         output_hidden_states=False,  # Whether the model returns all hidden-states.
-    ), num_classes=2)  # number of classes (0 - contradiction, 1 - entailment)
+    ), num_classes=3)  # number of classes (0 - contradiction, 1 - entailment)
 
     tokenizer = AutoTokenizer.from_pretrained("allenai/biomed_roberta_base")
 
@@ -289,25 +290,21 @@ def main_worker(gpu, ngpus_per_node, args):
 
     # construct data loader
     if args.dataset == 'SEMEVAL23':
-        train_filename = os.path.join(args.data_folder, 'training_data', "train.json")
-        # dev_filename = os.path.join(args.data_folder, 'training_data', "dev.json")
+        semeval_datafolder = os.path.join(args.data_folder, 'preprocessed', 'SEMEVAL23')
+        train_filename = os.path.join(semeval_datafolder, 'balanced_training_dataset.pkl')
 
-        train_file = open(train_filename, 'r')
-        train_data = json.load(train_file)
-        train_file.close()
-        # dev_file = open(dev_filename, 'r')
-        # dev_data = json.load(dev_file)
-        # dev_file.close()
+        training_data = pd.read_pickle(train_filename)
+        training_data = training_data.reset_index(drop=True)
 
-        train_dataset = convert_examples_to_features_balanced_dataset(train_data,
-                                                                      tokenizer=tokenizer,
-                                                                      max_length=args.max_seq_length)
+        train_dataset = get_balanced_dataset(training_data,
+                                             tokenizer=tokenizer,
+                                             max_length=args.max_seq_length)
         if args.distributed:
             train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
         else:
             train_sampler = None
 
-        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
+        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=False,
                                   num_workers=args.workers, pin_memory=True, sampler=train_sampler)
 
     else:

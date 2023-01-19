@@ -4,6 +4,7 @@ import argparse
 import time
 import math
 import random
+import pandas as pd
 import warnings
 from transformers import AutoTokenizer
 import torch
@@ -15,7 +16,7 @@ import torch.multiprocessing as mp
 import torch.utils.data
 import torch.utils.data.distributed
 
-from preprocessing.semeval_dataset import convert_examples_to_features_balanced_dataset
+from preprocessing.semeval_dataset import get_balanced_dataset
 from util import adjust_learning_rate, accuracy, warmup_learning_rate, \
     save_model, AverageMeter, ProgressMeter
 from torch.utils.data import DataLoader
@@ -185,11 +186,11 @@ def main_worker(gpu, ngpus_per_node, args):
 
     classifier = LinearClassifier(BertForCL.from_pretrained(
         "allenai/biomed_roberta_base",  # Use the 12-layer Biomed Roberta model from allenai, with a cased vocab.
-        num_labels=2,  # The number of output labels--2 for binary classification.
+        num_labels=3,  # The number of output labels--2 for binary classification.
         # You can increase this for multi-class tasks.
         output_attentions=False,  # Whether the model returns attentions weights.
         output_hidden_states=False,  # Whether the model returns all hidden-states.
-    ), num_classes=2)
+    ), num_classes=3)
 
     ckpt = torch.load(args.ckpt)
     state_dict = ckpt['model']
@@ -263,38 +264,40 @@ def main_worker(gpu, ngpus_per_node, args):
 
     # construct data loader
     if args.dataset == 'SEMEVAL23':
-        train_filename = os.path.join(args.data_folder, 'training_data', "train.json")
-        dev_filename = os.path.join(args.data_folder, 'training_data', "dev.json")
+        semeval_datafolder = os.path.join(args.data_folder, 'preprocessed', 'SEMEVAL23')
+        train_filename = os.path.join(semeval_datafolder, 'balanced_training_dataset.pkl')
+        dev_filename = os.path.join(semeval_datafolder, 'balanced_dev_dataset.pkl')
 
-        train_file = open(train_filename, 'r')
-        train_data = json.load(train_file)
-        train_file.close()
-        dev_file = open(dev_filename, 'r')
-        dev_data = json.load(dev_file)
-        dev_file.close()
+        training_data = pd.read_pickle(train_filename)
+        training_data = training_data.reset_index(drop=True)
 
-        train_dataset = convert_examples_to_features_balanced_dataset(train_data,
-                                                                      tokenizer=tokenizer,
-                                                                      max_length=args.max_seq_length)
-        validate_dataset = convert_examples_to_features_balanced_dataset(dev_data,
-                                                                         tokenizer=tokenizer,
-                                                                         max_length=args.max_seq_length)
+        dev_data = pd.read_pickle(dev_filename)
+        dev_data = dev_data.reset_index(drop=True)
+
+        train_dataset = get_balanced_dataset(training_data,
+                                             tokenizer=tokenizer,
+                                             max_length=args.max_seq_length)
+
+        validation_dataset = get_balanced_dataset(dev_data,
+                                                  tokenizer=tokenizer,
+                                                  max_length=args.max_seq_length)
+
         if args.distributed:
             train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
-            validate_sampler = torch.utils.data.distributed.DistributedSampler(validate_dataset)
+            validation_sampler = torch.utils.data.distributed.DistributedSampler(validation_dataset)
         else:
             train_sampler = None
-            validate_sampler = None
+            validation_sampler = None
 
-        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
+        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=False,
                                   num_workers=args.workers, pin_memory=True, sampler=train_sampler)
-        validate_loader = DataLoader(validate_dataset, batch_size=args.batch_size, shuffle=True,
-                                     num_workers=args.workers, pin_memory=True, sampler=validate_sampler)
+        validate_loader = DataLoader(validation_dataset, batch_size=args.batch_size, shuffle=False,
+                                     num_workers=args.workers, pin_memory=True, sampler=validation_sampler)
 
         for epoch in range(args.start_epoch, args.epochs):
             if args.distributed:
                 train_sampler.set_epoch(epoch)
-                validate_sampler.set_epoch(epoch)
+                validation_sampler.set_epoch(epoch)
 
             adjust_learning_rate(args, optimizer, epoch)
 
@@ -351,7 +354,7 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
             features = model(**inputs)
         logits = classifier(features.detach())
         classes = batch[5]
-        loss = criterion(logits.view(-1, 2), classes.view(-1))
+        loss = criterion(logits.view(-1, 3), classes.view(-1))
         losses.update(loss.item(), bsz)
 
         # update metric
@@ -400,7 +403,7 @@ def validate(val_loader, model, classifier, criterion, epoch, args):
             classes = batch[5]
             features = model(**inputs)
             logits = classifier(features.detach())
-            loss = criterion(logits.view(-1, 2), classes.view(-1))
+            loss = criterion(logits.view(-1, 3), classes.view(-1))
 
             # update metric
             # print(logits)
