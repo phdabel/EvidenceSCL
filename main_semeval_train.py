@@ -150,7 +150,7 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
         inputs = {"input_ids": batch[1], "attention_mask": batch[2], "token_type_ids": batch[3]}
         feature1, feature2 = model(**inputs)
 
-        loss_sup = criterion_sup(feature2, batch[4])
+        loss_sup = criterion_sup(feature2, batch[5])
         loss_ce = criterion_ce(feature1, batch[5])
         loss = args.alpha * loss_sup + loss_ce
 
