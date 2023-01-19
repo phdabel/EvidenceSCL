@@ -85,7 +85,7 @@ def get_balanced_dataset(data, tokenizer, max_length=128):
         for _idx in _grouped_data.index.to_list():
             _idx_map[_idx[0]].append(_idx)
 
-        return idx_map
+        return _idx_map
 
     idx_map = map_index(grouped_data)
     # monta o dataset intercalando uma instância de cada classe
