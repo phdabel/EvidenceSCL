@@ -11,6 +11,28 @@ from typing import Union, Optional, List
 import shutil
 
 
+# Workaround for the different TensorDatasets
+DATALOADER_KEY_MAP = {
+    'MNLI': {
+        'input_ids': 0,
+        'attention_mask': 1,
+        'token_type_ids': 2,
+        'labels': 3
+    },
+    'SNLI': {
+        'input_ids': 0,
+        'attention_mask': 1,
+        'token_type_ids': 2,
+        'labels': 3
+    },
+    'SEMEVAL23': {
+        'input_ids': 1,
+        'attention_mask': 2,
+        'token_type_ids': 3,
+        'labels': 5
+    }
+}
+
 class NLIProcessor(DataProcessor):
     """Processor for the NLI dataset"""
 

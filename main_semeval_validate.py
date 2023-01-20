@@ -19,7 +19,7 @@ import torch.utils.data.distributed
 
 from preprocessing.semeval_dataset import get_balanced_dataset
 from util import adjust_learning_rate, accuracy, warmup_learning_rate, \
-    save_model, AverageMeter, ProgressMeter, NLIProcessor, load_and_cache_examples
+    save_model, AverageMeter, ProgressMeter, NLIProcessor, load_and_cache_examples, DATALOADER_KEY_MAP
 from torch.utils.data import DataLoader
 from bert_model import BertForCL, LinearClassifier, PairSupConBert
 
@@ -47,8 +47,7 @@ def parse_option():
                         help='path to latest checkpoint (default: none)')
     parser.add_argument('--pretrained', dest='pretrained', action='store_true',
                         help='use pre-trained model')
-    parser.add_argument('--batch_size', type=int, default=64,
-                        help='batch_size')
+    parser.add_argument('--batch_size', type=int, default=64, help='batch_size')
     parser.add_argument('--learning_rate', type=float, default=5e-5,
                         help='learning rate')
     parser.add_argument('--lr_decay_epochs', type=str, default='10,15',
@@ -369,16 +368,18 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
 
         # compute loss
         batch = tuple(t.cuda() for t in batch)
-        inputs = {"input_ids": batch[1], "attention_mask": batch[2], "token_type_ids": batch[3]}
+        inputs = {"input_ids": batch[DATALOADER_KEY_MAP[args.dataset]["input_ids"]],
+                  "attention_mask": batch[DATALOADER_KEY_MAP[args.dataset]["attention_mask"]],
+                  "token_type_ids": batch[DATALOADER_KEY_MAP[args.dataset]["token_type_ids"]]}
         with torch.no_grad():
             features = model(**inputs)
         logits = classifier(features.detach())
-        classes = batch[5]
-        loss = criterion(logits.view(-1, 3), classes.view(-1))
+        labels = batch[DATALOADER_KEY_MAP[args.dataset]["labels"]]
+        loss = criterion(logits.view(-1, 3), labels.view(-1))
         losses.update(loss.item(), bsz)
 
         # update metric
-        acc1 = accuracy(logits, classes)
+        acc1 = accuracy(logits, labels)
         top.update(acc1[0].item(), bsz)
 
         # AdamW
@@ -419,16 +420,18 @@ def validate(val_loader, model, classifier, criterion, epoch, args):
 
             # compute loss
             batch = tuple(t.cuda() for t in batch)
-            inputs = {"input_ids": batch[1], "attention_mask": batch[2], "token_type_ids": batch[3]}
-            classes = batch[5]
+            inputs = {"input_ids": batch[DATALOADER_KEY_MAP[args.dataset]["input_ids"]],
+                      "attention_mask": batch[DATALOADER_KEY_MAP[args.dataset]["attention_mask"]],
+                      "token_type_ids": batch[DATALOADER_KEY_MAP[args.dataset]["token_type_ids"]]}
+            labels = batch[DATALOADER_KEY_MAP[args.dataset]["labels"]]
             features = model(**inputs)
             logits = classifier(features.detach())
-            loss = criterion(logits.view(-1, 3), classes.view(-1))
+            loss = criterion(logits.view(-1, 3), labels.view(-1))
 
             # update metric
             # print(logits)
             losses.update(loss.item(), bsz)
-            acc1 = accuracy(logits, classes)
+            acc1 = accuracy(logits, labels)
             top.update(acc1[0].item(), bsz)
 
             # measure elapsed time

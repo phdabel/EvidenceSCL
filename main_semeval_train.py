@@ -19,7 +19,7 @@ import torch.utils.data.distributed
 from torch.optim import AdamW
 from preprocessing.semeval_dataset import get_balanced_dataset
 from util import adjust_learning_rate, warmup_learning_rate, save_model, \
-    AverageMeter, ProgressMeter, NLIProcessor, load_and_cache_examples
+    AverageMeter, ProgressMeter, NLIProcessor, load_and_cache_examples, DATALOADER_KEY_MAP
 from torch.utils.data import DataLoader
 from bert_model import PairSupConBert, BertForCL
 from losses import SupConLoss
@@ -130,28 +130,6 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
         [batch_time, data_time, losses],
         prefix="Epoch: [{}]".format(epoch))
 
-    # workaround for different tensordatasets
-    dataloader_position = {
-        'MNLI': {
-            'input_ids': 0,
-            'attention_mask': 1,
-            'token_type_ids': 2,
-            'labels': 3
-        },
-        'SNLI': {
-            'input_ids': 0,
-            'attention_mask': 1,
-            'token_type_ids': 2,
-            'labels': 3
-        },
-        'SEMEVAL23': {
-            'input_ids': 1,
-            'attention_mask': 2,
-            'token_type_ids': 3,
-            'labels': 5
-        }
-    }
-
     # switch to train mode
     model.train()
     end = time.time()
@@ -165,18 +143,17 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
                 batch[i] = batch[i].cuda(args.gpu, non_blocking=True)
 
         # warm-up learning rate
-
         warmup_learning_rate(args, epoch, idx, len(train_loader), optimizer)
 
         # compute loss
         batch = tuple(t.cuda() for t in batch)
-        inputs = {"input_ids": batch[dataloader_position[args.dataset]['input_ids']],
-                  "attention_mask": batch[dataloader_position[args.dataset]['attention_mask']],
-                  "token_type_ids": batch[dataloader_position[args.dataset]['token_type_ids']]}
+        inputs = {"input_ids": batch[DATALOADER_KEY_MAP[args.dataset]['input_ids']],
+                  "attention_mask": batch[DATALOADER_KEY_MAP[args.dataset]['attention_mask']],
+                  "token_type_ids": batch[DATALOADER_KEY_MAP[args.dataset]['token_type_ids']]}
         feature1, feature2 = model(**inputs)
 
-        loss_sup = criterion_sup(feature2, batch[dataloader_position[args.dataset]['labels']])
-        loss_ce = criterion_ce(feature1, batch[dataloader_position[args.dataset]['labels']])
+        loss_sup = criterion_sup(feature2, batch[DATALOADER_KEY_MAP[args.dataset]['labels']])
+        loss_ce = criterion_ce(feature1, batch[DATALOADER_KEY_MAP[args.dataset]['labels']])
         loss = args.alpha * loss_sup + loss_ce
 
         # update metrics
