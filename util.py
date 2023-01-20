@@ -152,31 +152,29 @@ def convert_examples_to_features(examples: Union[List[InputExample], "tf.data.Da
             return float(example.label)
         raise KeyError(output_mode)
 
-    labels = [label_from_example(example) for example in examples]
+    guids = torch.tensor([example.guid for example in examples], dtype=torch.long)
+    labels = torch.tensor([label_from_example(example) for example in examples], dtype=torch.long)
+    inputs = tokenizer.batch_encode_plus([(example.text_a, example.text_b) for example in examples],
+                                         add_special_tokens=True,
+                                         padding='max_length',
+                                         truncation=True,
+                                         max_length=max_length,
+                                         return_token_type_ids=False,
+                                         return_attention_mask=True,
+                                         return_tensors='pt')
 
-    batch_encoding = tokenizer.batch_encode_plus([(example.text_a, example.text_b) for example in examples],
-                                                 add_special_tokens=True,
-                                                 padding='max_length',
-                                                 truncation=True,
-                                                 max_length=max_length,
-                                                 return_token_type_ids=False,
-                                                 return_attention_mask=True,
-                                                 return_tensors='pt')
+    inputs['token_type_ids'] = get_token_type_ids(inputs['input_ids'],
+                                                  eos_token_id=tokenizer.eos_token_id,
+                                                  sep_token_id=tokenizer.sep_token_id,
+                                                  max_length=max_length)
 
-    all_token_type_ids = get_token_type_ids(batch_encoding['input_ids'],
-                                            eos_token_id=tokenizer.eos_token_id,
-                                            sep_token_id=tokenizer.sep_token_id,
-                                            max_length=max_length)
+    dataset = TensorDataset(inputs['input_ids'],
+                            inputs['attention_mask'],
+                            inputs['token_type_ids'],
+                            labels,
+                            guids)
 
-    features = []
-    for i in range(len(examples)):
-        inputs = {k: batch_encoding[k][i] for k in batch_encoding}
-        inputs['token_type_ids'] = all_token_type_ids[i]
-
-        feature = InputFeatures(**inputs, label=labels[i])
-        features.append(feature)
-
-    return features
+    return dataset
 
 
 def load_and_cache_examples(args, processor, tokenizer, evaluate, dataset):
@@ -192,54 +190,30 @@ def load_and_cache_examples(args, processor, tokenizer, evaluate, dataset):
         ),
     )
     if os.path.exists(cached_features_file):
-        features = torch.load(cached_features_file)
-        if evaluate == "test_match" or evaluate == "test_mismatch":
-            all_guid = torch.tensor([f.guid for f in features], dtype=torch.long)
-            all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
-            all_attention_mask = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
-            all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
-            all_labels = torch.tensor([f.label for f in features], dtype=torch.long)
-            dataset = TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids, all_labels, all_guid)
-        else:
-            # print(features[0])
-            all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
-            all_attention_mask = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
-            all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
-            all_labels = torch.tensor([f.label for f in features], dtype=torch.long)
-            dataset = TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids, all_labels)
+        dataset = torch.load(cached_features_file)
     else:
         label_list = processor.get_labels()
         if evaluate == "test_match" or evaluate == "test_mismatch":
             examples = processor.get_examples()
-            features = convert_examples_to_features(
+            dataset = convert_examples_to_features(
                 examples,
                 tokenizer,
                 max_length=args.max_seq_length,
                 label_list=label_list,
                 output_mode="classification"
             )
-            torch.save(features, cached_features_file)
-            all_guid = torch.tensor([f.guid for f in features], dtype=torch.long)
-            all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
-            all_attention_mask = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
-            all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
-            all_labels = torch.tensor([f.label for f in features], dtype=torch.long)
-            dataset = TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids, all_labels, all_guid)
+
+            torch.save(dataset, cached_features_file)
         else:
             examples = processor.get_examples()
-            features = convert_examples_to_features(
+            dataset = convert_examples_to_features(
                 examples,
                 tokenizer,
                 max_length=args.max_seq_length,
                 label_list=label_list,
                 output_mode="classification"
             )
-            torch.save(features, cached_features_file)
-            all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
-            all_attention_mask = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
-            all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
-            all_labels = torch.tensor([f.label for f in features], dtype=torch.long)
-            dataset = TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids, all_labels)
+            torch.save(dataset, cached_features_file)
     print("finish build dataset")
     return dataset
 

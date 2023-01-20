@@ -19,7 +19,7 @@ import torch.utils.data.distributed
 from torch.optim import AdamW
 from preprocessing.semeval_dataset import get_balanced_dataset
 from util import adjust_learning_rate, warmup_learning_rate, save_model, \
-    AverageMeter, ProgressMeter, NLIProcessor, convert_examples_to_features, load_and_cache_examples
+    AverageMeter, ProgressMeter, NLIProcessor, load_and_cache_examples
 from torch.utils.data import DataLoader
 from bert_model import PairSupConBert, BertForCL
 from losses import SupConLoss
