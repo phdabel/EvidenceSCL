@@ -142,8 +142,8 @@ def convert_examples_to_features(examples: Union[List[InputExample], "tf.data.Da
 
     label_map = {label: i for i, label in enumerate(label_list)}
 
-    guids = torch.tensor([example.guid for example in examples], dtype=torch.long)
-    labels = torch.tensor([label_map[example.label] for example in examples], dtype=torch.long)
+    all_guids = torch.tensor([np.int(example.guid) for example in examples], dtype=torch.long)
+    all_labels = torch.tensor([label_map[example.label] for example in examples], dtype=torch.long)
     inputs = tokenizer.batch_encode_plus([(example.text_a, example.text_b) for example in examples],
                                          add_special_tokens=True,
                                          padding='max_length',
@@ -153,16 +153,16 @@ def convert_examples_to_features(examples: Union[List[InputExample], "tf.data.Da
                                          return_attention_mask=True,
                                          return_tensors='pt')
 
-    inputs['token_type_ids'] = get_token_type_ids(inputs['input_ids'],
-                                                  eos_token_id=tokenizer.eos_token_id,
-                                                  sep_token_id=tokenizer.sep_token_id,
-                                                  max_length=max_length)
+    all_token_type_ids = get_token_type_ids(inputs['input_ids'],
+                                            eos_token_id=tokenizer.eos_token_id,
+                                            sep_token_id=tokenizer.sep_token_id,
+                                            max_length=max_length)
 
     dataset = TensorDataset(inputs['input_ids'],
                             inputs['attention_mask'],
-                            inputs['token_type_ids'],
-                            labels,
-                            guids)
+                            all_token_type_ids,
+                            all_labels,
+                            all_guids)
 
     return dataset
 
