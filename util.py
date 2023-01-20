@@ -6,6 +6,7 @@ import torch.nn as nn
 from torch.utils.data import TensorDataset
 from transformers import DataProcessor, InputExample, InputFeatures
 from transformers.tokenization_utils import PreTrainedTokenizer
+from preprocessing.semeval_dataset import get_segment_points, get_token_type_ids
 from typing import Union, Optional, List
 import shutil
 
@@ -26,7 +27,7 @@ class NLIProcessor(DataProcessor):
         return examples
     
     def get_labels(self):
-        return ["contradiction", "entailment", "neutral"]
+        return ["entailment", "neutral", "contradiction"]
 
 
 class AverageMeter(object):
@@ -153,15 +154,24 @@ def convert_examples_to_features(examples: Union[List[InputExample], "tf.data.Da
 
     labels = [label_from_example(example) for example in examples]
 
-    batch_encoding = tokenizer([(example.text_a, example.text_b) for example in examples],
-                               max_length=max_length,
-                               padding='max_length',
-                               truncation=True,
-                               return_token_type_ids=True)
+    batch_encoding = tokenizer.batch_encode_plus([(example.text_a, example.text_b) for example in examples],
+                                                 add_special_tokens=True,
+                                                 padding='max_length',
+                                                 truncation=True,
+                                                 max_length=max_length,
+                                                 return_token_type_ids=False,
+                                                 return_attention_mask=True,
+                                                 return_tensors='pt')
+
+    all_token_type_ids = get_token_type_ids(batch_encoding['input_ids'],
+                                            eos_token_id=tokenizer.eos_token_id,
+                                            sep_token_id=tokenizer.sep_token_id,
+                                            max_length=max_length)
 
     features = []
     for i in range(len(examples)):
         inputs = {k: batch_encoding[k][i] for k in batch_encoding}
+        inputs['token_type_ids'] = all_token_type_ids[i]
 
         feature = InputFeatures(**inputs, label=labels[i])
         features.append(feature)

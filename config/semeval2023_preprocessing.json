@@ -6,8 +6,11 @@
     "ignore_punctuation": false,
     "num_words": null,
     "stopwords": [],
-    "labeldict": {"entailment": 0,
-                  "contradiction": 1},
+    "labeldict": {
+        "entailment": 0,
+        "neutral": 1,
+        "contradiction": 2
+    },
     "bos": "<s>",
     "eos": "</s>"
 }

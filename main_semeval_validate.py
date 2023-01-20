@@ -3,6 +3,7 @@ import json
 import argparse
 import time
 import math
+import pickle
 import random
 import pandas as pd
 import warnings
@@ -18,7 +19,7 @@ import torch.utils.data.distributed
 
 from preprocessing.semeval_dataset import get_balanced_dataset
 from util import adjust_learning_rate, accuracy, warmup_learning_rate, \
-    save_model, AverageMeter, ProgressMeter
+    save_model, AverageMeter, ProgressMeter, NLIProcessor, load_and_cache_examples
 from torch.utils.data import DataLoader
 from bert_model import BertForCL, LinearClassifier, PairSupConBert
 
@@ -32,7 +33,7 @@ def parse_option():
                              "than this will be truncated, sequences shorter will be padded.")
     parser.add_argument('--model', type=str, default='ROBERTA')
     parser.add_argument('--dataset', type=str, default='SEMEVAL23',
-                        choices=['SEMEVAL23'], help='dataset')
+                        choices=['MNLI', 'SNLI', 'SEMEVAL23'], help='dataset')
     parser.add_argument('--data_folder', type=str, default='./datasets', help='path to custom dataset')
 
     # training
@@ -282,43 +283,62 @@ def main_worker(gpu, ngpus_per_node, args):
                                                   tokenizer=tokenizer,
                                                   max_length=args.max_seq_length)
 
-        if args.distributed:
-            train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
-            validation_sampler = torch.utils.data.distributed.DistributedSampler(validation_dataset)
-        else:
-            train_sampler = None
-            validation_sampler = None
+    elif args.dataset == 'MNLI' or args.dataset == 'SNLI':
 
-        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=False,
-                                  num_workers=args.workers, pin_memory=True, sampler=train_sampler)
-        validate_loader = DataLoader(validation_dataset, batch_size=args.batch_size, shuffle=False,
-                                     num_workers=args.workers, pin_memory=True, sampler=validation_sampler)
+        train_file = os.path.join(args.data_folder, "preprocessed", args.dataset, "train_data.pkl")
+        dev_file = os.path.join(args.data_folder, "preprocessed", args.dataset, "matched_dev_data.pkl")
 
-        for epoch in range(args.start_epoch, args.epochs):
-            if args.distributed:
-                train_sampler.set_epoch(epoch)
-                validation_sampler.set_epoch(epoch)
+        print("load dataset")
+        with open(train_file, "rb") as pkl:
+            processor = NLIProcessor(pickle.load(pkl))
 
-            adjust_learning_rate(args, optimizer, epoch)
+        train_dataset = load_and_cache_examples(args, processor, tokenizer, "train", args.dataset)
 
-            time1 = time.time()
-            loss, train_acc = train(train_loader, model, classifier, criterion, optimizer, epoch, args)
-            time2 = time.time()
-            print('epoch {}, total time {:.2f}, loss {:.2f}, accuracy {:.2f}'
-                  .format(epoch, time2 - time1, loss, train_acc))
-            
-            _, acc = validate(validate_loader, model, classifier, criterion, epoch, args)
-            if acc > best_acc1:
-                best_acc1 = acc
-                print('best accuracy: {:.2f}'.format(best_acc1))
-        if not args.multiprocessing_distributed or (args.multiprocessing_distributed
-                                                    and args.rank % ngpus_per_node == 0):
-            save_file = os.path.join(args.save_folder, 'classifier_last.pth')
-            save_model(classifier, optimizer, args, epoch, save_file, False)
-        print("best accuracy: {:.2f}".format(best_acc1))
+        with open(dev_file, "rb") as pkl:
+            validation_processor = NLIProcessor(pickle.load(pkl))
+
+        validation_dataset = load_and_cache_examples(args, validation_processor, tokenizer, "validate", args.dataset)
 
     else:
+
         raise ValueError('dataset not supported: {}'.format(args.dataset))
+
+    if args.distributed:
+        train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
+        validation_sampler = torch.utils.data.distributed.DistributedSampler(validation_dataset)
+    else:
+        train_sampler = None
+        validation_sampler = None
+
+        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=(args.dataset == 'MNLI' or
+                                                                                      args.dataset == 'SNLI'),
+                                  num_workers=args.workers, pin_memory=True, sampler=train_sampler)
+        validate_loader = DataLoader(validation_dataset, batch_size=args.batch_size, shuffle=(args.dataset == 'MNLI' or
+                                                                                              args.dataset == 'SNLI'),
+                                     num_workers=args.workers, pin_memory=True, sampler=validation_sampler)
+
+    for epoch in range(args.start_epoch, args.epochs):
+        if args.distributed:
+            train_sampler.set_epoch(epoch)
+            validation_sampler.set_epoch(epoch)
+
+        adjust_learning_rate(args, optimizer, epoch)
+
+        time1 = time.time()
+        loss, train_acc = train(train_loader, model, classifier, criterion, optimizer, epoch, args)
+        time2 = time.time()
+        print('epoch {}, total time {:.2f}, loss {:.2f}, accuracy {:.2f}'
+              .format(epoch, time2 - time1, loss, train_acc))
+
+        _, acc = validate(validate_loader, model, classifier, criterion, epoch, args)
+        if acc > best_acc1:
+            best_acc1 = acc
+            print('best accuracy: {:.2f}'.format(best_acc1))
+    if not args.multiprocessing_distributed or (args.multiprocessing_distributed
+                                                and args.rank % ngpus_per_node == 0):
+        save_file = os.path.join(args.save_folder, 'classifier_last.pth')
+        save_model(classifier, optimizer, args, epoch, save_file, False)
+    print("best accuracy: {:.2f}".format(best_acc1))
 
 
 def train(train_loader, model, classifier, criterion, optimizer, epoch, args):

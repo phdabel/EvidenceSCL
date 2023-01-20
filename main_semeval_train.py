@@ -3,6 +3,7 @@ import argparse
 import time
 import math
 import json
+import pickle
 import warnings
 import numpy as np
 import pandas as pd
@@ -18,7 +19,7 @@ import torch.utils.data.distributed
 from torch.optim import AdamW
 from preprocessing.semeval_dataset import get_balanced_dataset
 from util import adjust_learning_rate, warmup_learning_rate, save_model, \
-    AverageMeter, ProgressMeter
+    AverageMeter, ProgressMeter, NLIProcessor, convert_examples_to_features, load_and_cache_examples
 from torch.utils.data import DataLoader
 from bert_model import PairSupConBert, BertForCL
 from losses import SupConLoss
@@ -32,7 +33,7 @@ def parse_option():
                              "Sequences longer than this will be truncated, sequences shorter will be padded.")
     parser.add_argument('--model', type=str, default='ROBERTA')
     parser.add_argument('--dataset', type=str, default='SEMEVAL23',
-                        choices=['SEMEVAL23'], help='dataset')
+                        choices=['MNLI', 'SNLI', 'SEMEVAL23'], help='dataset')
     parser.add_argument('--data_folder', type=str, default='./datasets', help='path to custom dataset')
     # training
     parser.add_argument('--workers', default=2, type=int, metavar='N',
@@ -47,11 +48,11 @@ def parse_option():
                         help='use pre-trained model')
     parser.add_argument('--batch_size', type=int, default=64,
                         help='batch_size (default: 64)')
-    parser.add_argument('--learning_rate', type=float, default=5e-5,
-                        help='learning rate (default: 5e-5)')
+    parser.add_argument('--learning_rate', type=float, default=1e-6,
+                        help='learning rate (default: 1e-6)')
     parser.add_argument('--lr_decay_epochs', type=str, default='5,8',
                         help='where to decay lr, can be a list')
-    parser.add_argument('--lr_decay_rate', type=float, default=0.1,
+    parser.add_argument('--lr_decay_rate', type=float, default=0.01,
                         help='decay rate for learning rate')
     parser.add_argument('--weight_decay', type=float, default=1e-4,
                         help='weight decay')
@@ -129,6 +130,28 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
         [batch_time, data_time, losses],
         prefix="Epoch: [{}]".format(epoch))
 
+    # workaround for different tensordatasets
+    dataloader_position = {
+        'MNLI': {
+            'input_ids': 0,
+            'attention_mask': 1,
+            'token_type_ids': 2,
+            'labels': 3
+        },
+        'SNLI': {
+            'input_ids': 0,
+            'attention_mask': 1,
+            'token_type_ids': 2,
+            'labels': 3
+        },
+        'SEMEVAL23': {
+            'input_ids': 1,
+            'attention_mask': 2,
+            'token_type_ids': 3,
+            'labels': 5
+        }
+    }
+
     # switch to train mode
     model.train()
     end = time.time()
@@ -147,11 +170,13 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
 
         # compute loss
         batch = tuple(t.cuda() for t in batch)
-        inputs = {"input_ids": batch[1], "attention_mask": batch[2], "token_type_ids": batch[3]}
+        inputs = {"input_ids": batch[dataloader_position[args.dataset]['input_ids']],
+                  "attention_mask": batch[dataloader_position[args.dataset]['attention_mask']],
+                  "token_type_ids": batch[dataloader_position[args.dataset]['token_type_ids']]}
         feature1, feature2 = model(**inputs)
 
-        loss_sup = criterion_sup(feature2, batch[5])
-        loss_ce = criterion_ce(feature1, batch[5])
+        loss_sup = criterion_sup(feature2, batch[dataloader_position[args.dataset]['labels']])
+        loss_ce = criterion_ce(feature1, batch[dataloader_position[args.dataset]['labels']])
         loss = args.alpha * loss_sup + loss_ce
 
         # update metrics
@@ -299,16 +324,26 @@ def main_worker(gpu, ngpus_per_node, args):
         train_dataset = get_balanced_dataset(training_data,
                                              tokenizer=tokenizer,
                                              max_length=args.max_seq_length)
-        if args.distributed:
-            train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
-        else:
-            train_sampler = None
 
-        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=False,
-                                  num_workers=args.workers, pin_memory=True, sampler=train_sampler)
+    elif args.dataset == 'SNLI' or args.dataset == "MNLI":
+        train_file = os.path.join(args.data_folder, "preprocessed", args.dataset, "train_data.pkl")
+
+        print("load dataset")
+        with open(train_file, "rb") as pkl:
+            processor = NLIProcessor(pickle.load(pkl))
+
+        train_dataset = load_and_cache_examples(args, processor, tokenizer, "train", args.dataset)
 
     else:
         raise ValueError('dataset not supported: {}'.format(args.dataset))
+
+    if args.distributed:
+        train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
+    else:
+        train_sampler = None
+
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=False,
+                              num_workers=args.workers, pin_memory=True, sampler=train_sampler)
 
     # handle - save each epoch
     # model_save_file = os.path.join(args.model_path, f'{args.model_name}.pt')

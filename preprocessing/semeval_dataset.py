@@ -94,8 +94,8 @@ def get_balanced_dataset(data, tokenizer, max_length=128):
     Sample = namedtuple('Sample', ('row', 'iid', 'rct', 'ev_order', 'premise', 'hypothesis', 'section',
                                    'valid_section', 'trial', 'itype', 'evidence_label', 'class_label'))
 
-    classdict = {'neutral': 0, 'entailment': 1, 'contradiction': 2}
-    rclassdict = {2: 'contradiction', 0: 'neutral', 1: 'entailment'}
+    classdict  = {'entailment': 0, 'neutral': 1, 'contradiction': 2}
+    rclassdict = {0: 'entailment', 1: 'neutral', 2: 'contradiction'}
 
     while not len(idx_map['contradiction']) == len(idx_map['neutral']) == len(idx_map['entailment']) == 0:
         try:
