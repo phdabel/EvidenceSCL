@@ -143,17 +143,8 @@ def convert_examples_to_features(examples: Union[List[InputExample], "tf.data.Da
 
     label_map = {label: i for i, label in enumerate(label_list)}
 
-    def label_from_example(example: InputExample) -> Union[int, float, None]:
-        if example.label is None:
-            return None
-        if output_mode == 'classification':
-            return label_map[example.label]
-        elif output_mode == 'regression':
-            return float(example.label)
-        raise KeyError(output_mode)
-
     guids = torch.tensor([example.guid for example in examples], dtype=torch.long)
-    labels = torch.tensor([label_from_example(example) for example in examples], dtype=torch.long)
+    labels = torch.tensor([label_map[example.label] for example in examples], dtype=torch.long)
     inputs = tokenizer.batch_encode_plus([(example.text_a, example.text_b) for example in examples],
                                          add_special_tokens=True,
                                          padding='max_length',
