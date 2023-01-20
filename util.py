@@ -136,8 +136,7 @@ def save_model(model, optimizer, opt, epoch, save_file, is_best):
 def convert_examples_to_features(examples: Union[List[InputExample], "tf.data.Dataset"],
                                  tokenizer: PreTrainedTokenizer,
                                  max_length: Optional[int] = None,
-                                 label_list=None,
-                                 output_mode=None):
+                                 label_list=None):
     if max_length is None:
         max_length = tokenizer.model_max_length
 
@@ -184,27 +183,15 @@ def load_and_cache_examples(args, processor, tokenizer, evaluate, dataset):
         dataset = torch.load(cached_features_file)
     else:
         label_list = processor.get_labels()
-        if evaluate == "test_match" or evaluate == "test_mismatch":
-            examples = processor.get_examples()
-            dataset = convert_examples_to_features(
-                examples,
-                tokenizer,
-                max_length=args.max_seq_length,
-                label_list=label_list,
-                output_mode="classification"
-            )
+        examples = processor.get_examples()
+        dataset = convert_examples_to_features(
+            examples,
+            tokenizer,
+            max_length=args.max_seq_length,
+            label_list=label_list
+        )
+        torch.save(dataset, cached_features_file)
 
-            torch.save(dataset, cached_features_file)
-        else:
-            examples = processor.get_examples()
-            dataset = convert_examples_to_features(
-                examples,
-                tokenizer,
-                max_length=args.max_seq_length,
-                label_list=label_list,
-                output_mode="classification"
-            )
-            torch.save(dataset, cached_features_file)
     print("finish build dataset")
     return dataset
 
