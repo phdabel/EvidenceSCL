@@ -17,9 +17,9 @@ import torch.multiprocessing as mp
 import torch.utils.data
 import torch.utils.data.distributed
 from torch.optim import AdamW
-from preprocessing.semeval_dataset import get_balanced_dataset
+from preprocessing.semeval_dataset import get_balanced_dataset_three_labels
 from util import adjust_learning_rate, warmup_learning_rate, save_model, \
-    AverageMeter, ProgressMeter, NLIProcessor, load_and_cache_examples, DATALOADER_KEY_MAP
+    AverageMeter, ProgressMeter, NLIProcessor, load_and_cache_examples
 from torch.utils.data import DataLoader
 from bert_model import PairSupConBert, BertForCL
 from losses import SupConLoss
@@ -56,6 +56,8 @@ def parse_option():
                         help='decay rate for learning rate')
     parser.add_argument('--weight_decay', type=float, default=1e-4,
                         help='weight decay')
+    parser.add_argument('--gradient_accumulator', type=int, default=8,
+                        help='number of steps to accumulate gradient before the weight update')
     parser.add_argument('--momentum', type=float, default=0.9,
                         help='momentum')
     parser.add_argument('--print_freq', type=int, default=100,
@@ -136,7 +138,7 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
     for idx, batch in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
-        bsz = batch[1].size(0)
+        bsz = batch[0].size(0)
 
         if args.gpu is not None:
             for i in range(1, len(batch)):
@@ -147,22 +149,25 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
 
         # compute loss
         batch = tuple(t.cuda() for t in batch)
-        inputs = {"input_ids": batch[DATALOADER_KEY_MAP[args.dataset]['input_ids']],
-                  "attention_mask": batch[DATALOADER_KEY_MAP[args.dataset]['attention_mask']],
-                  "token_type_ids": batch[DATALOADER_KEY_MAP[args.dataset]['token_type_ids']]}
+        inputs = {"input_ids": batch[0],
+                  "attention_mask": batch[1],
+                  "token_type_ids": batch[2]}
         feature1, feature2 = model(**inputs)
 
-        loss_sup = criterion_sup(feature2, batch[DATALOADER_KEY_MAP[args.dataset]['labels']])
-        loss_ce = criterion_ce(feature1, batch[DATALOADER_KEY_MAP[args.dataset]['labels']])
+        loss_sup = criterion_sup(feature2, batch[3])
+        loss_ce = criterion_ce(feature1, batch[3])
         loss = args.alpha * loss_sup + loss_ce
+        loss = loss / args.gradient_accumulator  # normalizes loss to account for batch accumulation
 
         # update metrics
         losses.update(loss.item(), bsz)
 
         # AdamW
-        optimizer.zero_grad()
         loss.backward()
-        optimizer.step()
+
+        if ((idx + 1) % args.gradient_accumulator) == 0 or (idx + 1) == len(train_loader):
+            optimizer.step()
+            optimizer.zero_grad()
 
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -298,7 +303,7 @@ def main_worker(gpu, ngpus_per_node, args):
         training_data = pd.read_pickle(train_filename)
         training_data = training_data.reset_index(drop=True)
 
-        train_dataset = get_balanced_dataset(training_data,
+        train_dataset = get_balanced_dataset_three_labels(training_data,
                                              tokenizer=tokenizer,
                                              max_length=args.max_seq_length)
 

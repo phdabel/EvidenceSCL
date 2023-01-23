@@ -74,7 +74,6 @@ class PairSupConBert(nn.Module):
         self.dim_mlp = encoder.fc.weight.shape[1]
         self.dropout = dropout
         self.is_train = is_train
-        self.num_classes = num_classes
         self.attention = SoftmaxAttention()
         self.projection = nn.Sequential(
             nn.Linear(4*self.dim_mlp, self.dim_mlp),
@@ -84,7 +83,7 @@ class PairSupConBert(nn.Module):
         self.head = nn.Sequential(nn.Linear(self.dim_mlp, self.dim_mlp),
                                   nn.ReLU(inplace=True))
         self.fc_sup = encoder.fc
-        self.fc_ce = nn.Linear(self.dim_mlp, self.num_classes)
+        self.fc_ce = nn.Linear(self.dim_mlp, num_classes)
 
     def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,
                 inputs_embeds=None):

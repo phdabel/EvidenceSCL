@@ -37,36 +37,6 @@ def get_token_type_ids(features: torch.Tensor, eos_token_id, sep_token_id, max_l
     return torch.tensor(all_token_type_ids)
 
 
-def get_masked_features(features: torch.Tensor, attention_mask: torch.Tensor, eos_token_id, sep_token_id, pad_token_id, max_length=128):
-    hypotheses = list()
-    hypotheses_mask = list()
-    premises = list()
-    premises_mask = list()
-    token_type_ids = get_token_type_ids(features, eos_token_id, sep_token_id, max_length)
-    for row, feature in enumerate(features):
-        seg_begining_1_idx, seg_ending_1_idx, seg_begining_2_idx, seg_ending_2_idx = get_segment_points(feature, eos_token_id, sep_token_id)
-
-        # masked segment 2
-        seg2_mask_sum = (token_type_ids[row]*pad_token_id)
-        masked_seg2 = (feature*(1-token_type_ids[row])) + seg2_mask_sum
-
-        # masked segment 1
-        seg_partial_mask = (seg_ending_1_idx - seg_begining_1_idx + 1) * [pad_token_id] + (seg_ending_2_idx - seg_begining_2_idx + 1) * [0]
-        seg1_padding = (max_length - len(seg_partial_mask)) * [1]
-        seg1_mask_sum = torch.tensor(seg_partial_mask + seg1_padding)
-        masked_seg1 = (token_type_ids[row]*feature)+seg1_mask_sum
-
-        premises.append(masked_seg2.unsqueeze(0))# sentence 1 (sentence 2 with mask)
-        hypotheses.append(masked_seg1.unsqueeze(0))# sentence 2 (sentence 1 with mask)
-        premises_mask.append((attention_mask[row]*(1-token_type_ids[row])).unsqueeze(0))
-        hypotheses_mask.append((attention_mask[row]*token_type_ids[row]).unsqueeze(0))
-
-    return {'hypotheses': torch.cat(hypotheses),
-            'hypotheses_mask': torch.cat(hypotheses_mask),
-            'premises': torch.cat(premises),
-            'premises_mask': torch.cat(premises_mask)}
-
-
 def get_evidences(rct_filepath, section_id):
     evidence_file = open(os.path.join(CT_FOLDER, rct_filepath + '.json'), 'r')
     evidences = json.load(evidence_file)
@@ -74,7 +44,7 @@ def get_evidences(rct_filepath, section_id):
     return evidences[section_id]
 
 
-def get_balanced_dataset(data, tokenizer, max_length=128):
+def get_balanced_dataset_three_labels(data, tokenizer, max_length=128):
     # agrupa por rótulo de classe
     g_data = data.groupby('class_label')
     grouped_data = g_data.apply(lambda x: x.sample(g_data.size().min()))
@@ -138,24 +108,26 @@ def get_balanced_dataset(data, tokenizer, max_length=128):
                                             eos_token_id=tokenizer.eos_token_id,
                                             sep_token_id=tokenizer.sep_token_id,
                                             max_length=max_length)
-    dataset = TensorDataset(all_ids,
-                            inputs['input_ids'],
+    dataset = TensorDataset(inputs['input_ids'],
                             inputs['attention_mask'],
                             all_token_type_ids,
+                            all_class_labels,
                             all_evidence_labels,
-                            all_class_labels)
+                            all_ids)
 
     return dataset
 
 
-def convert_examples_to_features_balanced_dataset(data, tokenizer, max_length=128):
+def get_balanced_dataset_two_labels(data, tokenizer, max_length=128):
     evidence_struct = dict(iid=list(), rct=list(), trial=list(), valid_section=list(), section=list(), itype=list(),
                            sentence1=list(), order_=list(), sentence2=list(), label_=list(), class_=list())
 
     Sample = namedtuple('Sample', ('row', 'iid', 'rct', 'ev_order', 'premise', 'hypothesis', 'section', 'trial',
                                    'itype', 'evidence_label', 'class_label'))
 
-    classdict = {'contradiction': 0, 'entailment': 1}
+    classdict = {'entailment': 0, 'contradiction': 1}
+    rclassdict = {0: 'entailment', 1: 'contradiction'}
+
     not_evidences = ['Intervention', 'Eligibility', 'Adverse Events', 'Results']
 
     for iid, instance in data.items():
@@ -242,16 +214,16 @@ def convert_examples_to_features_balanced_dataset(data, tokenizer, max_length=12
     all_evidence_labels = torch.tensor([sample.evidence_label for idx, sample in enumerate(dataset_items)], dtype=torch.long)
     all_class_labels = torch.tensor([sample.class_label for idx, sample in enumerate(dataset_items)], dtype=torch.long)
     all_ids = torch.tensor([sample.row for idx, sample in enumerate(dataset_items)], dtype=torch.long)
-    dataset = TensorDataset(all_ids,
-                            inputs['input_ids'],
+    dataset = TensorDataset(inputs['input_ids'],
                             inputs['attention_mask'],
                             inputs['token_type_ids'],
+                            all_class_labels,
                             all_evidence_labels,
-                            all_class_labels)
+                            all_ids)
     return dataset
 
 
-def convert_examples_to_features(data, tokenizer, max_length=358):
+def convert_examples_to_features(data, tokenizer, max_length=128):
     evidence_struct = dict(iid=list(), rct=list(), trial=list(), valid_section=list(), section=list(), itype=list(),
                            sentence1=list(), order_=list(), sentence2=list(), label=list(), class_=list())
 
@@ -317,9 +289,9 @@ def convert_examples_to_features(data, tokenizer, max_length=358):
 
     all_labels = torch.tensor([sample.label for idx, sample in enumerate(dataset_items)], dtype=torch.long)
     all_ids = torch.tensor([sample.row for idx, sample in enumerate(dataset_items)], dtype=torch.long)
-    dataset = TensorDataset(all_ids,
-                            inputs['input_ids'],
+    dataset = TensorDataset(inputs['input_ids'],
                             inputs['attention_mask'],
                             inputs['token_type_ids'],
-                            all_labels)
+                            all_labels,
+                            all_ids)
     return dataset

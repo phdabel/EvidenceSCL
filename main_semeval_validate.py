@@ -17,9 +17,9 @@ import torch.multiprocessing as mp
 import torch.utils.data
 import torch.utils.data.distributed
 
-from preprocessing.semeval_dataset import get_balanced_dataset
+from preprocessing.semeval_dataset import get_balanced_dataset_three_labels
 from util import adjust_learning_rate, accuracy, warmup_learning_rate, \
-    save_model, AverageMeter, ProgressMeter, NLIProcessor, load_and_cache_examples, DATALOADER_KEY_MAP
+    save_model, AverageMeter, ProgressMeter, NLIProcessor, load_and_cache_examples
 from torch.utils.data import DataLoader
 from bert_model import BertForCL, LinearClassifier, PairSupConBert
 
@@ -48,7 +48,7 @@ def parse_option():
     parser.add_argument('--pretrained', dest='pretrained', action='store_true',
                         help='use pre-trained model')
     parser.add_argument('--batch_size', type=int, default=64, help='batch_size')
-    parser.add_argument('--learning_rate', type=float, default=5e-5,
+    parser.add_argument('--learning_rate', type=float, default=0.01,
                         help='learning rate')
     parser.add_argument('--lr_decay_epochs', type=str, default='10,15',
                         help='where to decay lr, can be a list')
@@ -274,11 +274,11 @@ def main_worker(gpu, ngpus_per_node, args):
         dev_data = pd.read_pickle(dev_filename)
         dev_data = dev_data.reset_index(drop=True)
 
-        train_dataset = get_balanced_dataset(training_data,
+        train_dataset = get_balanced_dataset_three_labels(training_data,
                                              tokenizer=tokenizer,
                                              max_length=args.max_seq_length)
 
-        validation_dataset = get_balanced_dataset(dev_data,
+        validation_dataset = get_balanced_dataset_three_labels(dev_data,
                                                   tokenizer=tokenizer,
                                                   max_length=args.max_seq_length)
 
@@ -357,7 +357,7 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
     for idx, batch in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
-        bsz = batch[1].size(0)
+        bsz = batch[0].size(0)
 
         if args.gpu is not None:
             for i in range(1, len(batch)):
@@ -368,13 +368,13 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
 
         # compute loss
         batch = tuple(t.cuda() for t in batch)
-        inputs = {"input_ids": batch[DATALOADER_KEY_MAP[args.dataset]["input_ids"]],
-                  "attention_mask": batch[DATALOADER_KEY_MAP[args.dataset]["attention_mask"]],
-                  "token_type_ids": batch[DATALOADER_KEY_MAP[args.dataset]["token_type_ids"]]}
+        inputs = {"input_ids": batch[0],
+                  "attention_mask": batch[1],
+                  "token_type_ids": batch[2]}
         with torch.no_grad():
             features = model(**inputs)
         logits = classifier(features.detach())
-        labels = batch[DATALOADER_KEY_MAP[args.dataset]["labels"]]
+        labels = batch[3]
         loss = criterion(logits.view(-1, 3), labels.view(-1))
         losses.update(loss.item(), bsz)
 
@@ -412,7 +412,7 @@ def validate(val_loader, model, classifier, criterion, epoch, args):
     with torch.no_grad():
         end = time.time()
         for idx, batch in enumerate(val_loader):
-            bsz = batch[1].size(0)
+            bsz = batch[0].size(0)
 
             if args.gpu is not None:
                 for i in range(1, len(batch)):
@@ -420,10 +420,10 @@ def validate(val_loader, model, classifier, criterion, epoch, args):
 
             # compute loss
             batch = tuple(t.cuda() for t in batch)
-            inputs = {"input_ids": batch[DATALOADER_KEY_MAP[args.dataset]["input_ids"]],
-                      "attention_mask": batch[DATALOADER_KEY_MAP[args.dataset]["attention_mask"]],
-                      "token_type_ids": batch[DATALOADER_KEY_MAP[args.dataset]["token_type_ids"]]}
-            labels = batch[DATALOADER_KEY_MAP[args.dataset]["labels"]]
+            inputs = {"input_ids": batch[0],
+                      "attention_mask": batch[1],
+                      "token_type_ids": batch[2]}
+            labels = batch[3]
             features = model(**inputs)
             logits = classifier(features.detach())
             loss = criterion(logits.view(-1, 3), labels.view(-1))
