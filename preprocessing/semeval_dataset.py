@@ -125,8 +125,8 @@ def get_balanced_dataset_two_labels(data, tokenizer, max_length=128, exclude_not
     Sample = namedtuple('Sample', ('row', 'iid', 'rct', 'ev_order', 'premise', 'hypothesis', 'section', 'trial',
                                    'itype', 'evidence_label', 'class_label'))
 
-    classdict = {'contradiction': -1, 'entailment': 1}
-    #rclassdict = {1: 'entailment', -1: 'contradiction'}
+    classdict = {'contradiction': 0, 'entailment': 1}
+    #rclassdict = {1: 'entailment', 0: 'contradiction'}
 
     not_evidences = ['Intervention', 'Eligibility', 'Adverse Events', 'Results']
 
