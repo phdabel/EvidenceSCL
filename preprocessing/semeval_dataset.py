@@ -125,7 +125,7 @@ def get_balanced_dataset_two_labels(data, tokenizer, max_length=128, exclude_not
     Sample = namedtuple('Sample', ('row', 'iid', 'rct', 'ev_order', 'premise', 'hypothesis', 'section', 'trial',
                                    'itype', 'evidence_label', 'class_label'))
 
-    classdict = {'entailment': 1, 'contradiction': -1}
+    classdict = {'contradiction': -1, 'entailment': 1}
     #rclassdict = {1: 'entailment', -1: 'contradiction'}
 
     not_evidences = ['Intervention', 'Eligibility', 'Adverse Events', 'Results']
@@ -138,24 +138,30 @@ def get_balanced_dataset_two_labels(data, tokenizer, max_length=128, exclude_not
                     candidates = get_evidences(instance[_kid], section_id)
                     for i, evidence in enumerate(candidates):
                         # is evidence section condition
-                        evidence_struct['iid'].append(iid)
-                        evidence_struct['rct'].append(instance[_kid])
-                        evidence_struct['itype'].append(instance['Type'])
-                        evidence_struct['section'].append(instance['Section_id'])
-                        evidence_struct['sentence2'].append(instance['Statement'])
-                        evidence_struct['trial'].append(_kid.split('_')[0])
                         if is_evidence_section and i in instance[_kids]:
+                            evidence_struct['iid'].append(iid)
+                            evidence_struct['rct'].append(instance[_kid])
+                            evidence_struct['itype'].append(instance['Type'])
+                            evidence_struct['section'].append(instance['Section_id'])
+                            evidence_struct['sentence2'].append(instance['Statement'])
+                            evidence_struct['trial'].append(_kid.split('_')[0])
                             evidence_struct['order_'].append(i)
                             evidence_struct['sentence1'].append(evidence)
                             evidence_struct['class_'].append(instance['Label'].lower())
                             evidence_struct['label_'].append(1)
                             evidence_struct['valid_section'].append(is_evidence_section)
-                        elif not exclude_not_evidences:
-                            evidence_struct['order_'].append(i)
-                            evidence_struct['sentence1'].append(evidence)
-                            evidence_struct['class_'].append(instance['Label'].lower())
-                            evidence_struct['label_'].append(0)
-                            evidence_struct['valid_section'].append(False)
+                        # if is_evidence_section and i in instance[_kids]:
+                        #     evidence_struct['order_'].append(i)
+                        #     evidence_struct['sentence1'].append(evidence)
+                        #     evidence_struct['class_'].append(instance['Label'].lower())
+                        #     evidence_struct['label_'].append(1)
+                        #     evidence_struct['valid_section'].append(is_evidence_section)
+                        # elif not exclude_not_evidences:
+                        #     evidence_struct['order_'].append(i)
+                        #     evidence_struct['sentence1'].append(evidence)
+                        #     evidence_struct['class_'].append(instance['Label'].lower())
+                        #     evidence_struct['label_'].append(0)
+                        #     evidence_struct['valid_section'].append(False)
 
     evidence_df = pd.DataFrame(evidence_struct)
 
