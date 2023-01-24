@@ -55,7 +55,7 @@ def parse_option():
     parser.add_argument('--lr_decay_rate', type=float, default=0.1,
                         help='decay rate for learning rate')
     parser.add_argument('--weight_decay', type=float, default=1e-6,
-                        help='weight decay')
+                        help='weight decay')  # weight decay corresponds to the L2 regularization factor
     parser.add_argument('--gradient_accumulation_steps', type=int, default=32,
                         help='number of updates steps to accumulate before performing a backward/update pass.')
     parser.add_argument('--momentum', type=float, default=0.9,

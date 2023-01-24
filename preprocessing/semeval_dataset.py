@@ -208,7 +208,7 @@ def get_balanced_dataset_two_labels(data, tokenizer, max_length=128, exclude_not
             else:
                 continue
 
-    inputs = tokenizer.batch_encode_plus([(sample.premise, sample.hypothesis) for idx, sample in enumerate(dataset_items)],
+    inputs = tokenizer.batch_encode_plus([(sample.hypothesis, sample.premise) for idx, sample in enumerate(dataset_items)],
                                          add_special_tokens=True,
                                          padding='max_length',
                                          truncation=True,
