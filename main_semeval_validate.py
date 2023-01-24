@@ -28,7 +28,7 @@ def parse_option():
     parser = argparse.ArgumentParser('argument for training')
 
     # model dataset
-    parser.add_argument("--max_seq_length", default=128, type=int,
+    parser.add_argument("--max_seq_length", default=512, type=int,
                         help="The maximum total input sequence length after tokenization. Sequences longer "
                              "than this will be truncated, sequences shorter will be padded.")
     parser.add_argument('--model', type=str, default='ROBERTA')
@@ -47,16 +47,16 @@ def parse_option():
                         help='path to latest checkpoint (default: none)')
     parser.add_argument('--pretrained', dest='pretrained', action='store_true',
                         help='use pre-trained model')
-    parser.add_argument('--batch_size', type=int, default=64, help='batch_size')
-    parser.add_argument('--learning_rate', type=float, default=1e-5,
+    parser.add_argument('--batch_size', type=int, default=16, help='batch_size')
+    parser.add_argument('--learning_rate', type=float, default=5e-5,
                         help='learning rate')
     parser.add_argument('--lr_decay_epochs', type=str, default='10,15',
                         help='where to decay lr, can be a list')
     parser.add_argument('--lr_decay_rate', type=float, default=0.1,
                         help='decay rate for learning rate')
-    parser.add_argument('--weight_decay', type=float, default=1e-4,
+    parser.add_argument('--weight_decay', type=float, default=1e-6,
                         help='weight decay')
-    parser.add_argument('--gradient_accumulation_steps', type=int, default=8,
+    parser.add_argument('--gradient_accumulation_steps', type=int, default=32,
                         help='number of updates steps to accumulate before performing a backward/update pass.')
     parser.add_argument('--momentum', type=float, default=0.9,
                         help='momentum')
@@ -280,8 +280,8 @@ def main_worker(gpu, ngpus_per_node, args):
                                                         tokenizer=tokenizer,
                                                         max_length=args.max_seq_length)
         validation_dataset = get_balanced_dataset_two_labels(dev_data,
-                                                           tokenizer=tokenizer,
-                                                           max_length=args.max_seq_length)
+                                                             tokenizer=tokenizer,
+                                                             max_length=args.max_seq_length)
     elif args.dataset == 'SEMEVAL23':
         semeval_datafolder = os.path.join(args.data_folder, 'preprocessed', 'SEMEVAL23')
         train_filename = os.path.join(semeval_datafolder, 'balanced_training_dataset.pkl')

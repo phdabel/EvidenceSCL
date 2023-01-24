@@ -28,7 +28,7 @@ from losses import SupConLoss
 def parse_option():
     parser = argparse.ArgumentParser('argument for training')
     # model dataset
-    parser.add_argument("--max_seq_length", default=128, type=int, 
+    parser.add_argument("--max_seq_length", default=512, type=int,
                         help="The maximum total input sequence length after tokenization. "
                              "Sequences longer than this will be truncated, sequences shorter will be padded.")
     parser.add_argument('--model', type=str, default='ROBERTA')
@@ -38,7 +38,7 @@ def parse_option():
     # training
     parser.add_argument('--workers', default=2, type=int, metavar='N',
                         help='number of data loading workers (default: 2)')
-    parser.add_argument('--epochs', default=15, type=int, metavar='N',
+    parser.add_argument('--epochs', default=20, type=int, metavar='N',
                         help='number of total epochs to run')
     parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                         help='manual epoch number (useful on restarts)')
@@ -46,17 +46,17 @@ def parse_option():
                         help='path to latest checkpoint (default: none)')
     parser.add_argument('--pretrained', dest='pretrained', action='store_true',
                         help='use pre-trained model')
-    parser.add_argument('--batch_size', type=int, default=64,
+    parser.add_argument('--batch_size', type=int, default=16,
                         help='batch_size (default: 64)')
-    parser.add_argument('--learning_rate', type=float, default=1e-6,
-                        help='learning rate (default: 1e-6)')
+    parser.add_argument('--learning_rate', type=float, default=5e-5,
+                        help='learning rate (default: 5e-5)')
     parser.add_argument('--lr_decay_epochs', type=str, default='5,8',
                         help='where to decay lr, can be a list')
     parser.add_argument('--lr_decay_rate', type=float, default=0.01,
                         help='decay rate for learning rate')
-    parser.add_argument('--weight_decay', type=float, default=1e-4,
+    parser.add_argument('--weight_decay', type=float, default=1e-6,
                         help='weight decay')
-    parser.add_argument('--gradient_accumulation_steps', type=int, default=8,
+    parser.add_argument('--gradient_accumulation_steps', type=int, default=32,
                         help='number of updates steps to accumulate before performing a backward/update pass.')
     parser.add_argument('--momentum', type=float, default=0.9,
                         help='momentum')
@@ -158,7 +158,8 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
 
         loss_sup = criterion_sup(feature2, batch[3])
         loss_ce = criterion_ce(feature1, batch[3])
-        loss = args.alpha * loss_sup + loss_ce
+        loss = loss_sup + args.alpha * loss_ce
+
         if args.gradient_accumulation_steps > 1:
             loss = loss / args.gradient_accumulation_steps  # normalizes loss to account for batch accumulation
 
