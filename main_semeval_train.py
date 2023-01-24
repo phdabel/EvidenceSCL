@@ -154,7 +154,7 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
                   "token_type_ids": batch[2]}
         feature1, feature2 = model(**inputs)
 
-        loss_sup = criterion_sup(feature2, batch[3])
+        loss_sup = criterion_sup(feature2, batch[4])
         loss_ce = criterion_ce(feature1, batch[3])
         loss = args.alpha * loss_sup + loss_ce
         loss = loss / args.gradient_accumulator  # normalizes loss to account for batch accumulation
