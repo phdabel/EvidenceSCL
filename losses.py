@@ -5,9 +5,10 @@ import torch.nn as nn
 class SupConLoss(nn.Module):
     """Supervised Contrastive Learning: https://arxiv.org/pdf/2004.11362.pdf."""
     def __init__(self, temperature=0.07, contrast_mode='all',
-                 base_temperature=0.07):
+                 base_temperature=0.07, eta=1e-06):
         super(SupConLoss, self).__init__()
         self.temperature = temperature
+        self.eta = eta
         self.contrast_mode = contrast_mode
         self.base_temperature = base_temperature
 
@@ -63,7 +64,7 @@ class SupConLoss(nn.Module):
 
         # workaround to handle nans in meanlog_prob_pos
         denominator = mask.sum(1)
-        denominator[denominator < 1e-6] = 1.0
+        denominator[denominator < self.eta] = 1.0
 
         # compute mean of log-likelihood over positive
         mean_log_prob_pos = (mask * log_prob).sum(1) / denominator

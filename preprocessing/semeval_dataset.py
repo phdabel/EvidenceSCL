@@ -118,15 +118,15 @@ def get_balanced_dataset_three_labels(data, tokenizer, max_length=128):
     return dataset
 
 
-def get_balanced_dataset_two_labels(data, tokenizer, max_length=128):
+def get_balanced_dataset_two_labels(data, tokenizer, max_length=128, exclude_not_evidences=True):
     evidence_struct = dict(iid=list(), rct=list(), trial=list(), valid_section=list(), section=list(), itype=list(),
                            sentence1=list(), order_=list(), sentence2=list(), label_=list(), class_=list())
 
     Sample = namedtuple('Sample', ('row', 'iid', 'rct', 'ev_order', 'premise', 'hypothesis', 'section', 'trial',
                                    'itype', 'evidence_label', 'class_label'))
 
-    classdict = {'entailment': 0, 'contradiction': 1}
-    rclassdict = {0: 'entailment', 1: 'contradiction'}
+    classdict = {'entailment': 1, 'contradiction': -1}
+    #rclassdict = {1: 'entailment', -1: 'contradiction'}
 
     not_evidences = ['Intervention', 'Eligibility', 'Adverse Events', 'Results']
 
@@ -150,10 +150,10 @@ def get_balanced_dataset_two_labels(data, tokenizer, max_length=128):
                             evidence_struct['class_'].append(instance['Label'].lower())
                             evidence_struct['label_'].append(1)
                             evidence_struct['valid_section'].append(is_evidence_section)
-                        else:
+                        elif not exclude_not_evidences:
                             evidence_struct['order_'].append(i)
                             evidence_struct['sentence1'].append(evidence)
-                            evidence_struct['class_'].append('neutral')
+                            evidence_struct['class_'].append(instance['Label'].lower())
                             evidence_struct['label_'].append(0)
                             evidence_struct['valid_section'].append(False)
 
@@ -182,9 +182,9 @@ def get_balanced_dataset_two_labels(data, tokenizer, max_length=128):
                                         evidence_label=evidence.label_,
                                         class_label=classdict[evidence.class_]))
             true_label += 1
-        elif evidence.label_ == 0 and last_iid == evidence.iid:
+        elif evidence.label_ == 0 and last_iid == evidence.iid and not exclude_not_evidences:
             if neg_label is None:
-                neg_label = np.ceil(true_label * 1)
+                neg_label = np.ceil(true_label * .25)
 
             if neg_label > 0:
                 dataset_items.append(Sample(row=row,
@@ -207,16 +207,20 @@ def get_balanced_dataset_two_labels(data, tokenizer, max_length=128):
                                          padding='max_length',
                                          truncation=True,
                                          max_length=max_length,
-                                         return_token_type_ids=True,
+                                         return_token_type_ids=False,
                                          return_attention_mask=True,
                                          return_tensors='pt')
 
     all_evidence_labels = torch.tensor([sample.evidence_label for idx, sample in enumerate(dataset_items)], dtype=torch.long)
     all_class_labels = torch.tensor([sample.class_label for idx, sample in enumerate(dataset_items)], dtype=torch.long)
     all_ids = torch.tensor([sample.row for idx, sample in enumerate(dataset_items)], dtype=torch.long)
+    all_token_type_ids = get_token_type_ids(inputs['input_ids'],
+                                            eos_token_id=tokenizer.eos_token_id,
+                                            sep_token_id=tokenizer.sep_token_id,
+                                            max_length=max_length)
     dataset = TensorDataset(inputs['input_ids'],
                             inputs['attention_mask'],
-                            inputs['token_type_ids'],
+                            all_token_type_ids,
                             all_class_labels,
                             all_evidence_labels,
                             all_ids)

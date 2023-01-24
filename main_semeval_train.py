@@ -17,7 +17,7 @@ import torch.multiprocessing as mp
 import torch.utils.data
 import torch.utils.data.distributed
 from torch.optim import AdamW
-from preprocessing.semeval_dataset import get_balanced_dataset_three_labels
+from preprocessing.semeval_dataset import get_balanced_dataset_three_labels, get_balanced_dataset_two_labels
 from util import adjust_learning_rate, warmup_learning_rate, save_model, \
     AverageMeter, ProgressMeter, NLIProcessor, load_and_cache_examples
 from torch.utils.data import DataLoader
@@ -33,7 +33,7 @@ def parse_option():
                              "Sequences longer than this will be truncated, sequences shorter will be padded.")
     parser.add_argument('--model', type=str, default='ROBERTA')
     parser.add_argument('--dataset', type=str, default='SEMEVAL23',
-                        choices=['MNLI', 'SNLI', 'SEMEVAL23'], help='dataset')
+                        choices=['MNLI', 'SNLI', 'SEMEVAL23', 'SEMEVAL23_RAW'], help='dataset')
     parser.add_argument('--data_folder', type=str, default='./datasets', help='path to custom dataset')
     # training
     parser.add_argument('--workers', default=2, type=int, metavar='N',
@@ -56,8 +56,8 @@ def parse_option():
                         help='decay rate for learning rate')
     parser.add_argument('--weight_decay', type=float, default=1e-4,
                         help='weight decay')
-    parser.add_argument('--gradient_accumulator', type=int, default=8,
-                        help='number of steps to accumulate gradient before the weight update')
+    parser.add_argument('--gradient_accumulation_steps', type=int, default=8,
+                        help='number of updates steps to accumulate before performing a backward/update pass.')
     parser.add_argument('--momentum', type=float, default=0.9,
                         help='momentum')
     parser.add_argument('--print_freq', type=int, default=100,
@@ -86,6 +86,8 @@ def parse_option():
                         help='temperature for loss function (default: 0.05)')
     parser.add_argument('--cosine', action='store_true',
                         help='using cosine annealing')
+    parser.add_argument('--eta', action=1e-5,
+                        help='minimum value')
     parser.add_argument('--warm', action='store_true',
                         help='warm-up for large batch training')
     args = parser.parse_args()
@@ -154,10 +156,11 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
                   "token_type_ids": batch[2]}
         feature1, feature2 = model(**inputs)
 
-        loss_sup = criterion_sup(feature2, batch[4])
+        loss_sup = criterion_sup(feature2, batch[3])
         loss_ce = criterion_ce(feature1, batch[3])
         loss = args.alpha * loss_sup + loss_ce
-        loss = loss / args.gradient_accumulator  # normalizes loss to account for batch accumulation
+        if args.gradient_accumulation_steps > 1:
+            loss = loss / args.gradient_accumulation_steps  # normalizes loss to account for batch accumulation
 
         # update metrics
         losses.update(loss.item(), bsz)
@@ -165,7 +168,7 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
         # AdamW
         loss.backward()
 
-        if ((idx + 1) % args.gradient_accumulator) == 0 or (idx + 1) == len(train_loader):
+        if ((idx + 1) % args.gradient_accumulation_steps) == 0 or (idx + 1) == len(train_loader):
             optimizer.step()
             optimizer.zero_grad()
 
@@ -234,7 +237,7 @@ def main_worker(gpu, ngpus_per_node, args):
         # You can increase this for multi-class tasks.
         output_attentions=False,  # Whether the model returns attentions weights.
         output_hidden_states=False,  # Whether the model returns all hidden-states.
-    ), num_classes=3)  # number of classes (0 - contradiction, 1 - entailment)
+    ), num_classes=2)  # number of classes (0 - contradiction, 1 - entailment)
 
     tokenizer = AutoTokenizer.from_pretrained("allenai/biomed_roberta_base")
 
@@ -296,7 +299,19 @@ def main_worker(gpu, ngpus_per_node, args):
     cudnn.benchmark = True
 
     # construct data loader
-    if args.dataset == 'SEMEVAL23':
+    if args.dataset == 'SEMEVAL23_RAW':
+        train_filename = os.path.join(args.data_folder, 'training_data', "train.json")
+        # dev_filename = os.path.join(args.data_folder, 'training_data', "dev.json")
+
+        train_file = open(train_filename, 'r')
+        train_data = json.load(train_file)
+        train_file.close()
+
+        train_dataset = get_balanced_dataset_two_labels(train_data,
+                                                        tokenizer=tokenizer,
+                                                        max_length=args.max_seq_length)
+
+    elif args.dataset == 'SEMEVAL23':
         semeval_datafolder = os.path.join(args.data_folder, 'preprocessed', 'SEMEVAL23')
         train_filename = os.path.join(semeval_datafolder, 'balanced_training_dataset.pkl')
 
@@ -304,8 +319,8 @@ def main_worker(gpu, ngpus_per_node, args):
         training_data = training_data.reset_index(drop=True)
 
         train_dataset = get_balanced_dataset_three_labels(training_data,
-                                             tokenizer=tokenizer,
-                                             max_length=args.max_seq_length)
+                                                          tokenizer=tokenizer,
+                                                          max_length=args.max_seq_length)
 
     elif args.dataset == 'SNLI' or args.dataset == "MNLI":
         train_file = os.path.join(args.data_folder, "preprocessed", args.dataset, "train_data.pkl")

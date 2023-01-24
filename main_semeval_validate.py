@@ -17,7 +17,7 @@ import torch.multiprocessing as mp
 import torch.utils.data
 import torch.utils.data.distributed
 
-from preprocessing.semeval_dataset import get_balanced_dataset_three_labels
+from preprocessing.semeval_dataset import get_balanced_dataset_three_labels, get_balanced_dataset_two_labels
 from util import adjust_learning_rate, accuracy, warmup_learning_rate, \
     save_model, AverageMeter, ProgressMeter, NLIProcessor, load_and_cache_examples
 from torch.utils.data import DataLoader
@@ -33,7 +33,7 @@ def parse_option():
                              "than this will be truncated, sequences shorter will be padded.")
     parser.add_argument('--model', type=str, default='ROBERTA')
     parser.add_argument('--dataset', type=str, default='SEMEVAL23',
-                        choices=['MNLI', 'SNLI', 'SEMEVAL23'], help='dataset')
+                        choices=['MNLI', 'SNLI', 'SEMEVAL23', 'SEMEVAL23_RAW'], help='dataset')
     parser.add_argument('--data_folder', type=str, default='./datasets', help='path to custom dataset')
 
     # training
@@ -48,7 +48,7 @@ def parse_option():
     parser.add_argument('--pretrained', dest='pretrained', action='store_true',
                         help='use pre-trained model')
     parser.add_argument('--batch_size', type=int, default=64, help='batch_size')
-    parser.add_argument('--learning_rate', type=float, default=0.01,
+    parser.add_argument('--learning_rate', type=float, default=1e-5,
                         help='learning rate')
     parser.add_argument('--lr_decay_epochs', type=str, default='10,15',
                         help='where to decay lr, can be a list')
@@ -56,6 +56,8 @@ def parse_option():
                         help='decay rate for learning rate')
     parser.add_argument('--weight_decay', type=float, default=1e-4,
                         help='weight decay')
+    parser.add_argument('--gradient_accumulation_steps', type=int, default=8,
+                        help='number of updates steps to accumulate before performing a backward/update pass.')
     parser.add_argument('--momentum', type=float, default=0.9,
                         help='momentum')
     parser.add_argument('--print_freq', type=int, default=100,
@@ -186,11 +188,11 @@ def main_worker(gpu, ngpus_per_node, args):
 
     classifier = LinearClassifier(BertForCL.from_pretrained(
         "allenai/biomed_roberta_base",  # Use the 12-layer Biomed Roberta model from allenai, with a cased vocab.
-        num_labels=3,  # The number of output labels--2 for binary classification.
+        num_labels=2,  # The number of output labels--2 for binary classification.
         # You can increase this for multi-class tasks.
         output_attentions=False,  # Whether the model returns attentions weights.
         output_hidden_states=False,  # Whether the model returns all hidden-states.
-    ), num_classes=3)
+    ), num_classes=2)
 
     ckpt = torch.load(args.ckpt)
     state_dict = ckpt['model']
@@ -263,7 +265,24 @@ def main_worker(gpu, ngpus_per_node, args):
     cudnn.benchmark = True
 
     # construct data loader
-    if args.dataset == 'SEMEVAL23':
+    if args.dataset == 'SEMEVAL23_RAW':
+        train_filename = os.path.join(args.data_folder, 'training_data', "train.json")
+        dev_filename = os.path.join(args.data_folder, 'training_data', "dev.json")
+
+        train_file = open(train_filename, 'r')
+        train_data = json.load(train_file)
+        train_file.close()
+        dev_file = open(dev_filename, 'r')
+        dev_data = json.load(dev_file)
+        dev_file.close()
+
+        train_dataset = get_balanced_dataset_two_labels(train_data,
+                                                        tokenizer=tokenizer,
+                                                        max_length=args.max_seq_length)
+        validation_dataset = get_balanced_dataset_two_labels(dev_data,
+                                                           tokenizer=tokenizer,
+                                                           max_length=args.max_seq_length)
+    elif args.dataset == 'SEMEVAL23':
         semeval_datafolder = os.path.join(args.data_folder, 'preprocessed', 'SEMEVAL23')
         train_filename = os.path.join(semeval_datafolder, 'balanced_training_dataset.pkl')
         dev_filename = os.path.join(semeval_datafolder, 'balanced_dev_dataset.pkl')
@@ -309,11 +328,9 @@ def main_worker(gpu, ngpus_per_node, args):
         train_sampler = None
         validation_sampler = None
 
-        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=(args.dataset == 'MNLI' or
-                                                                                      args.dataset == 'SNLI'),
+        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=False,
                                   num_workers=args.workers, pin_memory=True, sampler=train_sampler)
-        validate_loader = DataLoader(validation_dataset, batch_size=args.batch_size, shuffle=(args.dataset == 'MNLI' or
-                                                                                              args.dataset == 'SNLI'),
+        validate_loader = DataLoader(validation_dataset, batch_size=args.batch_size, shuffle=True,
                                      num_workers=args.workers, pin_memory=True, sampler=validation_sampler)
 
     for epoch in range(args.start_epoch, args.epochs):
@@ -373,19 +390,25 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
                   "token_type_ids": batch[2]}
         with torch.no_grad():
             features = model(**inputs)
+
         logits = classifier(features.detach())
         labels = batch[3]
-        loss = criterion(logits.view(-1, 3), labels.view(-1))
+        loss = criterion(logits.view(-1, 2), labels.view(-1))
+
+        if args.gradient_accumulation_steps > 1:
+            loss = loss / args.gradient_accumulation_steps  # normalizes loss to account for batch accumulation
+
         losses.update(loss.item(), bsz)
+        loss.backward()
 
         # update metric
         acc1 = accuracy(logits, labels)
         top.update(acc1[0].item(), bsz)
 
         # AdamW
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+        if ((idx + 1) % args.gradient_accumulation_steps) == 0 or (idx + 1) == len(train_loader):
+            optimizer.zero_grad()
+            optimizer.step()
 
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -426,7 +449,7 @@ def validate(val_loader, model, classifier, criterion, epoch, args):
             labels = batch[3]
             features = model(**inputs)
             logits = classifier(features.detach())
-            loss = criterion(logits.view(-1, 3), labels.view(-1))
+            loss = criterion(logits.view(-1, 2), labels.view(-1))
 
             # update metric
             # print(logits)

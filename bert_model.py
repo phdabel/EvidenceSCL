@@ -57,7 +57,7 @@ class BertForCL(RobertaPreTrainedModel):
 
 class LinearClassifier(nn.Module):
     """Linear classifier"""
-    def __init__(self, encoder, num_classes=3):
+    def __init__(self, encoder, num_classes=2):
         super(LinearClassifier, self).__init__()
         dim_mlp = encoder.fc.weight.shape[1]
         # 768  2
@@ -68,7 +68,7 @@ class LinearClassifier(nn.Module):
 
 
 class PairSupConBert(nn.Module):
-    def __init__(self, encoder, dropout=0.5, is_train=True, num_classes=3):
+    def __init__(self, encoder, dropout=0.5, is_train=True, num_classes=2):
         super(PairSupConBert, self).__init__()
         self.encoder = encoder.bert
         self.dim_mlp = encoder.fc.weight.shape[1]
