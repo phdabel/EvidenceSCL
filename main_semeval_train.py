@@ -86,7 +86,7 @@ def parse_option():
                         help='temperature for loss function (default: 0.05)')
     parser.add_argument('--cosine', action='store_true',
                         help='using cosine annealing')
-    parser.add_argument('--eta', action=1e-5,
+    parser.add_argument('--eta', type=float, default=1e-5,
                         help='minimum value')
     parser.add_argument('--warm', action='store_true',
                         help='warm-up for large batch training')
