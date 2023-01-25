@@ -230,7 +230,7 @@ def get_balanced_dataset_two_labels(data, tokenizer, max_length=128, exclude_not
                             all_class_labels,
                             all_evidence_labels,
                             all_ids)
-    return dataset
+    return dataset, evidence_df, dataset_items
 
 
 def convert_examples_to_features(data, tokenizer, max_length=128):

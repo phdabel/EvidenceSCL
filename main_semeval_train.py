@@ -308,7 +308,7 @@ def main_worker(gpu, ngpus_per_node, args):
         train_data = json.load(train_file)
         train_file.close()
 
-        train_dataset = get_balanced_dataset_two_labels(train_data,
+        train_dataset, _, _ = get_balanced_dataset_two_labels(train_data,
                                                         tokenizer=tokenizer,
                                                         max_length=args.max_seq_length)
 

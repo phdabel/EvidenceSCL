@@ -276,10 +276,10 @@ def main_worker(gpu, ngpus_per_node, args):
         dev_data = json.load(dev_file)
         dev_file.close()
 
-        train_dataset = get_balanced_dataset_two_labels(train_data,
+        train_dataset, _, _ = get_balanced_dataset_two_labels(train_data,
                                                         tokenizer=tokenizer,
                                                         max_length=args.max_seq_length)
-        validation_dataset = get_balanced_dataset_two_labels(dev_data,
+        validation_dataset, _, _ = get_balanced_dataset_two_labels(dev_data,
                                                              tokenizer=tokenizer,
                                                              max_length=args.max_seq_length)
     elif args.dataset == 'SEMEVAL23':
