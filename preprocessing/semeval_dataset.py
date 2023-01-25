@@ -126,7 +126,7 @@ def get_balanced_dataset_two_labels(data, tokenizer, max_length=128, exclude_not
                                    'itype', 'evidence_label', 'class_label'))
 
     classdict = {'contradiction': 0, 'entailment': 1}
-    #rclassdict = {1: 'entailment', 0: 'contradiction'}
+    #rclassdict = {0: 'contradiction', 1: 'entailment'}
 
     not_evidences = ['Intervention', 'Eligibility', 'Adverse Events', 'Results']
 
