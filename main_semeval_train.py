@@ -82,6 +82,8 @@ def parse_option():
                              'which has N GPUs. This is the fastest way to use PyTorch for either single '
                              'node or multi node data parallel training')
     # parameters
+    parser.add_argument('--shuffle', action='store_true',
+                        help='shuffle dataloader')
     parser.add_argument('--alpha', type=float, default=1.0,
                         help="the parameter to balance the training objective (default: 1.0)")
     parser.add_argument('--temp', type=float, default=0.05,
@@ -220,7 +222,7 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
 
         if ((idx + 1) % args.gradient_accumulation_steps) == 0 or (idx + 1) == len(train_loader):
             optimizer.step()
-            scheduler.step()
+            scheduler.step((epoch + idx)/len(train_loader))
             optimizer.zero_grad()
 
         # measure elapsed time
@@ -414,7 +416,8 @@ def main_worker(gpu, ngpus_per_node, args):
         train_sampler = None
         validation_sampler = None
 
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=False,
+    shuffle = True if args.shuffle else False
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=shuffle,
                               num_workers=args.workers, pin_memory=True, sampler=train_sampler)
 
     if validation_dataset is not None:
