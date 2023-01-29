@@ -48,7 +48,7 @@ def parse_option():
                         help='path to latest checkpoint (default: none)')
     parser.add_argument('--pretrained', dest='pretrained', action='store_true',
                         help='use pre-trained model')
-    parser.add_argument('--batch_size', type=int, default=16, help='batch_size')
+    parser.add_argument('--batch_size', type=int, default=8, help='batch_size')
     parser.add_argument('--learning_rate', type=float, default=5e-5,
                         help='learning rate')
     parser.add_argument('--lr_decay_epochs', type=str, default='10,15',
@@ -57,7 +57,7 @@ def parse_option():
                         help='decay rate for learning rate')
     parser.add_argument('--weight_decay', type=float, default=1e-6,
                         help='weight decay')  # weight decay corresponds to the L2 regularization factor
-    parser.add_argument('--gradient_accumulation_steps', type=int, default=32,
+    parser.add_argument('--gradient_accumulation_steps', type=int, default=64,
                         help='number of updates steps to accumulate before performing a backward/update pass.')
     parser.add_argument('--momentum', type=float, default=0.9,
                         help='momentum')
@@ -84,6 +84,8 @@ def parse_option():
                              'which has N GPUs. This is the fastest way to use PyTorch for either single '
                              'node or multi node data parallel training')
     # parameters
+    parser.add_argument('--shuffle', action='store_true',
+                        help='shuffle dataloader')
     parser.add_argument('--temp', type=float, default=0.05,
                         help='temperature for loss function')
     parser.add_argument('--cosine', action='store_true',
@@ -270,13 +272,20 @@ def main_worker(gpu, ngpus_per_node, args):
 
         semeval_datafolder = os.path.join(args.data_folder, 'preprocessed', args.dataset)
         train_filename = os.path.join(semeval_datafolder, 'dataset_1_mnli_mednli_semeval.pkl')
+        dev_filename = os.path.join(semeval_datafolder, 'dataset_1_dev_semeval23.pkl')
 
         training_data = pd.read_pickle(train_filename)
         training_data = training_data.reset_index(drop=True)
+        dev_data = pd.read_pickle(dev_filename)
+        dev_data = dev_data.reset_index(drop=True)
 
         train_dataset = get_dataset_from_dataframe(training_data,
                                                    tokenizer=tokenizer,
                                                    max_length=args.max_seq_length)
+
+        validation_dataset = get_dataset_from_dataframe(dev_data,
+                                                        tokenizer=tokenizer,
+                                                        max_length=args.max_seq_length)
 
     elif args.dataset == 'SEMEVAL23_RAW':
         train_filename = os.path.join(args.data_folder, 'training_data', "train.json")
