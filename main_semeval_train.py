@@ -1,5 +1,6 @@
 import os
 import argparse
+import random
 import time
 import math
 import json
@@ -86,6 +87,8 @@ def parse_option():
                         help='shuffle dataloader')
     parser.add_argument('--alpha', type=float, default=1.0,
                         help="the parameter to balance the training objective (default: 1.0)")
+    parser.add_argument('--coefficient', type=float, default=0.001,
+                        help='L! regularization coefficient')
     parser.add_argument('--temp', type=float, default=0.05,
                         help='temperature for loss function (default: 0.05)')
     parser.add_argument('--cosine', action='store_true',
@@ -183,6 +186,7 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
         [batch_time, data_time, losses],
         prefix="Epoch: [{}]".format(epoch))
 
+    l1_criterion = nn.L1Loss(reduction='mean')
     scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=5, eta_min=1e-06)
 
     # switch to train mode
@@ -211,8 +215,13 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
         loss_ce = criterion_ce(feature1, batch[3])
         loss = loss_sup + args.alpha * loss_ce
 
+        # L1 regularization
+        for param in model.parameters():
+            loss += args.coefficient * l1_criterion(param, torch.zeros_like(param))
+
+        # normalizes loss to account for batch accumulation
         if args.gradient_accumulation_steps > 1:
-            loss = loss / args.gradient_accumulation_steps  # normalizes loss to account for batch accumulation
+            loss = loss / args.gradient_accumulation_steps
 
         # update metrics
         losses.update(loss.item(), bsz)
@@ -239,6 +248,7 @@ def main():
     args = parse_option()
 
     if args.seed is not None:
+        random.seed(args.seed)
         np.random.seed(args.seed)
         torch.manual_seed(args.seed)
         cudnn.deterministic = True
