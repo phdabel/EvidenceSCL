@@ -88,7 +88,7 @@ def parse_option():
     parser.add_argument('--alpha', type=float, default=1.0,
                         help="the parameter to balance the training objective (default: 1.0)")
     parser.add_argument('--coefficient', type=float, default=0.001,
-                        help='L! regularization coefficient')
+                        help='L1 regularization coefficient')
     parser.add_argument('--temp', type=float, default=0.05,
                         help='temperature for loss function (default: 0.05)')
     parser.add_argument('--cosine', action='store_true',
@@ -202,7 +202,7 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
                 batch[i] = batch[i].cuda(args.gpu, non_blocking=True)
 
         # warm-up learning rate
-        warmup_learning_rate(args, epoch, idx, len(train_loader), optimizer)
+        # warmup_learning_rate(args, epoch, idx, len(train_loader), optimizer)
 
         # compute loss
         batch = tuple(t.cuda() for t in batch)

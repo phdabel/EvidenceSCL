@@ -9,10 +9,12 @@ import pandas as pd
 import warnings
 from transformers import AutoTokenizer
 import torch
+import torch.nn as nn
 import torch.nn.parallel
 import torch.backends.cudnn as cudnn
 import torch.distributed as dist
 import torch.optim as optim
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 import torch.multiprocessing as mp
 import torch.utils.data
 import torch.utils.data.distributed
@@ -86,6 +88,8 @@ def parse_option():
     # parameters
     parser.add_argument('--shuffle', action='store_true',
                         help='shuffle dataloader')
+    parser.add_argument('--coefficient', type=float, default=0.001,
+                        help='L1 regularization coefficient')
     parser.add_argument('--temp', type=float, default=0.05,
                         help='temperature for loss function')
     parser.add_argument('--cosine', action='store_true',
@@ -393,6 +397,9 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
         [batch_time, data_time, losses, top],
         prefix="Epoch: [{}]".format(epoch))
 
+    l1_criterion = nn.L1Loss(reduction='mean')
+    scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=5, eta_min=1e-06)
+
     # switch to train mode
     model.eval()
     classifier.train()
@@ -407,7 +414,7 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
                 batch[i] = batch[i].cuda(args.gpu, non_blocking=True)
 
         # warm-up learning rate
-        warmup_learning_rate(args, epoch, idx, len(train_loader), optimizer)
+        # warmup_learning_rate(args, epoch, idx, len(train_loader), optimizer)
 
         # compute loss
         batch = tuple(t.cuda() for t in batch)
@@ -421,6 +428,10 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
         labels = batch[3]
         loss = criterion(logits.view(-1, 2), labels.view(-1))
 
+        # L1 regularization
+        for param in model.parameters():
+            loss += args.coefficient * l1_criterion(param, torch.zeros_like(param))
+
         if args.gradient_accumulation_steps > 1:
             loss = loss / args.gradient_accumulation_steps  # normalizes loss to account for batch accumulation
 
@@ -433,8 +444,9 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
 
         # AdamW
         if ((idx + 1) % args.gradient_accumulation_steps) == 0 or (idx + 1) == len(train_loader):
-            optimizer.zero_grad()
             optimizer.step()
+            scheduler.step((epoch + idx) / len(train_loader))
+            optimizer.zero_grad()
 
         # measure elapsed time
         batch_time.update(time.time() - end)
