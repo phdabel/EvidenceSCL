@@ -17,7 +17,9 @@ import torch.multiprocessing as mp
 import torch.utils.data
 import torch.utils.data.distributed
 from torch.optim import AdamW
-from preprocessing.semeval_dataset import get_balanced_dataset_three_labels, get_balanced_dataset_two_labels
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
+from preprocessing.semeval_dataset import get_balanced_dataset_three_labels, get_balanced_dataset_two_labels, \
+    get_dataset_from_dataframe
 from util import adjust_learning_rate, warmup_learning_rate, save_model, \
     AverageMeter, ProgressMeter, NLIProcessor, load_and_cache_examples
 from torch.utils.data import DataLoader
@@ -125,6 +127,51 @@ def parse_option():
     return args
 
 
+def validate(validation_loader, model, criterion_sup, criterion_ce, epoch, args):
+    batch_time = AverageMeter('Time', ':6.3f')
+    data_time = AverageMeter('Data', ':6.3f')
+    losses = AverageMeter('Loss', ':6.7f')
+    progress = ProgressMeter(
+        len(validation_loader),
+        [batch_time, data_time, losses],
+        prefix="Epoch: [{}]".format(epoch)
+    )
+
+    # switch to eval mode
+    model.eval()
+    with torch.no_grad():
+        end = time.time()
+        for idx, batch in enumerate(validation_loader):
+            bsz = batch[0].size(0)
+
+            if args.gpu is not None:
+                for i in range(1, len(batch)):
+                    batch[i] = batch[i].cuda(args.gpu, non_blocking=True)
+
+            # compute loss
+            batch = tuple(t.cuda() for t in batch)
+            inputs = {"input_ids": batch[0],
+                      "attention_mask": batch[1],
+                      "token_type_ids": batch[2]}
+            feature1, feature2 = model(**inputs)
+
+            loss_sup = criterion_sup(feature2, batch[3])
+            loss_ce = criterion_ce(feature1, batch[3])
+            loss = loss_sup + args.alpha * loss_ce
+            # update metric
+            # print(logits)
+            losses.update(loss.item(), bsz)
+
+            # measure elapsed time
+            batch_time.update(time.time() - end)
+            end = time.time()
+
+            # print info
+            if (idx + 1) % args.print_freq == 0:
+                progress.display(idx)
+    return losses.avg
+
+
 def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
@@ -133,6 +180,8 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
         len(train_loader),
         [batch_time, data_time, losses],
         prefix="Epoch: [{}]".format(epoch))
+
+    scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=5, eta_min=1e-06)
 
     # switch to train mode
     model.train()
@@ -171,6 +220,7 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
 
         if ((idx + 1) % args.gradient_accumulation_steps) == 0 or (idx + 1) == len(train_loader):
             optimizer.step()
+            scheduler.step()
             optimizer.zero_grad()
 
         # measure elapsed time
@@ -299,8 +349,28 @@ def main_worker(gpu, ngpus_per_node, args):
 
     cudnn.benchmark = True
 
+    validation_dataset = None
     # construct data loader
-    if args.dataset == 'SEMEVAL23_RAW':
+    if args.dataset == 'DATASET_ONE':
+
+        semeval_datafolder = os.path.join(args.data_folder, 'preprocessed', args.dataset)
+        train_filename = os.path.join(semeval_datafolder, 'dataset_1_mnli_mednli_semeval.pkl')
+        dev_filename = os.path.join(semeval_datafolder, 'dataset_1_dev_semeval23.pkl')
+
+        training_data = pd.read_pickle(train_filename)
+        training_data = training_data.reset_index(drop=True)
+        dev_data = pd.read_pickle(dev_filename)
+        dev_data = dev_data.reset_index(drop=True)
+
+        train_dataset = get_dataset_from_dataframe(training_data,
+                                                   tokenizer=tokenizer,
+                                                   max_length=args.max_seq_length)
+
+        validation_dataset = get_dataset_from_dataframe(dev_data,
+                                                        tokenizer=tokenizer,
+                                                        max_length=args.max_seq_length)
+
+    elif args.dataset == 'SEMEVAL23_RAW':
         train_filename = os.path.join(args.data_folder, 'training_data', "train.json")
         # dev_filename = os.path.join(args.data_folder, 'training_data', "dev.json")
 
@@ -309,8 +379,8 @@ def main_worker(gpu, ngpus_per_node, args):
         train_file.close()
 
         train_dataset, _, _ = get_balanced_dataset_two_labels(train_data,
-                                                        tokenizer=tokenizer,
-                                                        max_length=args.max_seq_length)
+                                                              tokenizer=tokenizer,
+                                                              max_length=args.max_seq_length)
 
     elif args.dataset == 'SEMEVAL23':
         semeval_datafolder = os.path.join(args.data_folder, 'preprocessed', 'SEMEVAL23')
@@ -337,11 +407,21 @@ def main_worker(gpu, ngpus_per_node, args):
 
     if args.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
+        validation_sampler = None
+        if validation_dataset is not None:
+            validation_sampler = torch.utils.data.distributed.DistributedSampler(validation_dataset)
     else:
         train_sampler = None
+        validation_sampler = None
 
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=False,
                               num_workers=args.workers, pin_memory=True, sampler=train_sampler)
+
+    if validation_dataset is not None:
+        validation_loader = DataLoader(validation_dataset, batch_size=args.batch_size, shuffle=False,
+                                       num_workers=args.workers, pin_memory=True, sampler=validation_sampler)
+
+
 
     # handle - save each epoch
     # model_save_file = os.path.join(args.model_path, f'{args.model_name}.pt')
@@ -350,12 +430,21 @@ def main_worker(gpu, ngpus_per_node, args):
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             train_sampler.set_epoch(epoch)
+            if validation_dataset is not None:
+                validation_sampler.set_epoch(epoch)
+
         adjust_learning_rate(args, optimizer, epoch)
 
         time1 = time.time()
         loss = train(train_loader, model, criterion_supcon, criterion_ce, optimizer, epoch, args)
         time2 = time.time()
-        print('epoch {}, total time {:.2f}, loss {:.7f}'.format(epoch, (time2 - time1), loss))
+        print('Training epoch {}, total time {:.2f}, loss {:.7f}'.format(epoch, (time2 - time1), loss))
+
+        val_time1 = time.time()
+        validation_loss = validate(validation_loader, model, criterion_supcon, criterion_ce, epoch, args)
+        val_time2 = time.time()
+        print('Validation epoch {}, total time {:.2f}, loss {:.7f}'.format(epoch, (val_time2 - val_time1), validation_loss))
+
         
     # save the last model
     if not args.multiprocessing_distributed or (args.multiprocessing_distributed and args.rank % ngpus_per_node == 0):

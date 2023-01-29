@@ -17,7 +17,8 @@ import torch.multiprocessing as mp
 import torch.utils.data
 import torch.utils.data.distributed
 
-from preprocessing.semeval_dataset import get_balanced_dataset_three_labels, get_balanced_dataset_two_labels
+from preprocessing.semeval_dataset import get_balanced_dataset_three_labels, get_balanced_dataset_two_labels, \
+    get_dataset_from_dataframe
 from util import adjust_learning_rate, accuracy, warmup_learning_rate, \
     save_model, AverageMeter, ProgressMeter, NLIProcessor, load_and_cache_examples
 from torch.utils.data import DataLoader
@@ -265,7 +266,19 @@ def main_worker(gpu, ngpus_per_node, args):
     cudnn.benchmark = True
 
     # construct data loader
-    if args.dataset == 'SEMEVAL23_RAW':
+    if args.dataset == 'DATASET_ONE':
+
+        semeval_datafolder = os.path.join(args.data_folder, 'preprocessed', args.dataset)
+        train_filename = os.path.join(semeval_datafolder, 'dataset_1_mnli_mednli_semeval.pkl')
+
+        training_data = pd.read_pickle(train_filename)
+        training_data = training_data.reset_index(drop=True)
+
+        train_dataset = get_dataset_from_dataframe(training_data,
+                                                   tokenizer=tokenizer,
+                                                   max_length=args.max_seq_length)
+
+    elif args.dataset == 'SEMEVAL23_RAW':
         train_filename = os.path.join(args.data_folder, 'training_data', "train.json")
         dev_filename = os.path.join(args.data_folder, 'training_data', "dev.json")
 

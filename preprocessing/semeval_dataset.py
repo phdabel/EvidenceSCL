@@ -44,6 +44,39 @@ def get_evidences(rct_filepath, section_id):
     return evidences[section_id]
 
 
+def get_dataset_from_dataframe(data, tokenizer, classdict=None, max_length=128):
+    # default is binary problem
+
+    if classdict is None:
+        classdict = {'contradiction': 0, 'entailment': 1}
+
+    inputs = tokenizer.batch_encode_plus(
+        [(sample.premises, sample.hypotheses) for i, sample in data.iterrows()],
+        add_special_tokens=True,
+        padding='max_length',
+        truncation=True,
+        max_length=max_length,
+        return_token_type_ids=False,
+        return_attention_mask=True,
+        return_tensors='pt')
+
+    all_evidence_labels = torch.tensor([sample.evidence_label for i, sample in data.iterrows()], dtype=torch.long)
+    all_class_labels = torch.tensor([classdict[sample.class_label] for i, sample in data.iterrows()], dtype=torch.long)
+    all_ids = torch.tensor([i for i, sample in data.iterrows()], dtype=torch.long)
+
+    all_token_type_ids = get_token_type_ids(inputs['input_ids'],
+                                            eos_token_id=tokenizer.eos_token_id,
+                                            sep_token_id=tokenizer.sep_token_id,
+                                            max_length=max_length)
+    dataset = TensorDataset(inputs['input_ids'],
+                            inputs['attention_mask'],
+                            all_token_type_ids,
+                            all_class_labels,
+                            all_evidence_labels,
+                            all_ids)
+
+    return dataset
+
 def get_balanced_dataset_three_labels(data, tokenizer, max_length=128):
     # agrupa por rótulo de classe
     g_data = data.groupby('class_label')
