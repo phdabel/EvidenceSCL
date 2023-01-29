@@ -44,7 +44,7 @@ def get_evidences(rct_filepath, section_id):
     return evidences[section_id]
 
 
-def get_dataset_from_dataframe(data, tokenizer, classdict=None, max_length=128):
+def get_dataset_from_dataframe(data, tokenizer, classdict=None, max_length=128, train=True):
     # default is binary problem
 
     if classdict is None:
@@ -60,10 +60,11 @@ def get_dataset_from_dataframe(data, tokenizer, classdict=None, max_length=128):
         return_attention_mask=True,
         return_tensors='pt')
 
-    all_evidence_labels = torch.tensor([sample.evidence_label for i, sample in data.iterrows()], dtype=torch.long)
+    if not train:
+        all_evidence_labels = torch.tensor([sample.evidence_label for i, sample in data.iterrows()], dtype=torch.long)
+
     all_class_labels = torch.tensor([classdict[sample.class_label] for i, sample in data.iterrows()], dtype=torch.long)
     all_ids = torch.tensor([i for i, sample in data.iterrows()], dtype=torch.long)
-
     all_token_type_ids = get_token_type_ids(inputs['input_ids'],
                                             eos_token_id=tokenizer.eos_token_id,
                                             sep_token_id=tokenizer.sep_token_id,
@@ -72,7 +73,7 @@ def get_dataset_from_dataframe(data, tokenizer, classdict=None, max_length=128):
                             inputs['attention_mask'],
                             all_token_type_ids,
                             all_class_labels,
-                            all_evidence_labels,
+                            # all_evidence_labels,
                             all_ids)
 
     return dataset
