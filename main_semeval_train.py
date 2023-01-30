@@ -363,7 +363,26 @@ def main_worker(gpu, ngpus_per_node, args):
 
     validation_dataset = None
     # construct data loader
-    if args.dataset == 'DATASET_TWO':
+    if args.dataset == 'DATASET_EVIDENCES':
+        # used to train a evidence identifier
+        semeval_datafolder = os.path.join(args.data_folder, 'preprocessed', args.dataset)
+        train_filename = os.path.join(semeval_datafolder, 'dataset_two_evidence_training.pkl')
+        dev_filename = os.path.join(semeval_datafolder, 'dataset_two_evidence_validation.pkl')
+
+        training_data = pd.read_pickle(train_filename)
+        training_data = training_data.reset_index(drop=True)
+        dev_data = pd.read_pickle(dev_filename)
+        dev_data = dev_data.reset_index(drop=True)
+
+        train_dataset = get_dataset_from_dataframe(training_data,
+                                                   tokenizer=tokenizer,
+                                                   max_length=args.max_seq_length)
+
+        validation_dataset = get_dataset_from_dataframe(dev_data,
+                                                        tokenizer=tokenizer,
+                                                        max_length=args.max_seq_length)
+
+    elif args.dataset == 'DATASET_TWO':
 
         semeval_datafolder = os.path.join(args.data_folder, 'preprocessed', args.dataset)
         train_filename = os.path.join(semeval_datafolder, 'dataset_two_combined_training.pkl')
