@@ -272,7 +272,25 @@ def main_worker(gpu, ngpus_per_node, args):
     cudnn.benchmark = True
 
     # construct data loader
-    if args.dataset == 'DATASET_ONE':
+    if args.dataset == 'DATASET_TWO':
+
+        semeval_datafolder = os.path.join(args.data_folder, 'preprocessed', args.dataset)
+        train_filename = os.path.join(semeval_datafolder, 'dataset_two_combined_training.pkl')
+        dev_filename = os.path.join(semeval_datafolder, 'dataset_two_combined_validation.pkl')
+
+        training_data = pd.read_pickle(train_filename)
+        training_data = training_data.reset_index(drop=True)
+        dev_data = pd.read_pickle(dev_filename)
+        dev_data = dev_data.reset_index(drop=True)
+
+        train_dataset = get_dataset_from_dataframe(training_data,
+                                                   tokenizer=tokenizer,
+                                                   max_length=args.max_seq_length)
+
+        validation_dataset = get_dataset_from_dataframe(dev_data,
+                                                        tokenizer=tokenizer,
+                                                        max_length=args.max_seq_length)
+    elif args.dataset == 'DATASET_ONE':
 
         semeval_datafolder = os.path.join(args.data_folder, 'preprocessed', args.dataset)
         train_filename = os.path.join(semeval_datafolder, 'dataset_1_mnli_mednli_semeval.pkl')
@@ -354,9 +372,10 @@ def main_worker(gpu, ngpus_per_node, args):
         train_sampler = None
         validation_sampler = None
 
-        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=False,
+        shuffle = True if args.shuffle else False
+        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=shuffle,
                                   num_workers=args.workers, pin_memory=True, sampler=train_sampler)
-        validate_loader = DataLoader(validation_dataset, batch_size=args.batch_size, shuffle=True,
+        validate_loader = DataLoader(validation_dataset, batch_size=args.batch_size, shuffle=shuffle,
                                      num_workers=args.workers, pin_memory=True, sampler=validation_sampler)
 
     for epoch in range(args.start_epoch, args.epochs):
