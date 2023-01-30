@@ -36,7 +36,7 @@ def parse_option():
                              "than this will be truncated, sequences shorter will be padded.")
     parser.add_argument('--model', type=str, default='ROBERTA')
     parser.add_argument('--dataset', type=str, default='SEMEVAL23',
-                        choices=['MNLI', 'SNLI', 'SEMEVAL23', 'SEMEVAL23_RAW', 'DATASET_ONE'], help='dataset')
+                        help='dataset')
     parser.add_argument('--data_folder', type=str, default='./datasets', help='path to custom dataset')
 
     # training
