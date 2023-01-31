@@ -583,7 +583,7 @@ def validate(val_loader, semeval_dataset, semeval_ids, model, classifier, criter
         results_df['_gold_label'] = [1 if np.sum(row.gold_label) > 0 else 0 for i, row in results_df.iterrows()]
 
         acc = accuracy_score(results_df['_gold_label'], results_df['_predicted'], normalize=True)
-        print("Sem Eval Validation Accuracy: .3f" % acc)
+        print(f'Sem Eval Validation Accuracy: {acc:.3f}')
 
         for idx, batch in enumerate(val_loader):
             bsz = batch[0].size(0)
