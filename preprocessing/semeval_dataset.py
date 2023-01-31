@@ -70,7 +70,7 @@ def get_dataset_from_dataframe(data, tokenizer, args, classdict=None, max_length
         all_class_labels = torch.tensor([sample.class_label for i, sample in data.iterrows()], dtype=torch.long)
 
     all_ids = torch.tensor([i for i, sample in data.iterrows()], dtype=torch.long)
-    all_iids = [sample.iid for i, sample in data.iterrows()]
+    # all_iids = [sample.iid for i, sample in data.iterrows()]
 
     all_token_type_ids = get_token_type_ids(inputs['input_ids'],
                                             eos_token_id=tokenizer.eos_token_id,
@@ -80,7 +80,6 @@ def get_dataset_from_dataframe(data, tokenizer, args, classdict=None, max_length
                             inputs['attention_mask'],
                             all_token_type_ids,
                             all_class_labels,
-                            all_iids,
                             all_ids)
 
     return dataset

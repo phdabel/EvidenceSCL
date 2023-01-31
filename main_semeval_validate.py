@@ -431,7 +431,7 @@ def main_worker(gpu, ngpus_per_node, args):
         print('epoch {}, total time {:.2f}, loss {:.2f}, accuracy {:.2f}'
               .format(epoch, time2 - time1, loss, train_acc))
 
-        _, acc = validate(validate_loader, semeval_dataset, model, classifier, criterion, epoch, args)
+        _, acc = validate(validate_loader, semeval_dataset, semeval_data, model, classifier, criterion, epoch, args)
         if acc > best_acc1:
             best_acc1 = acc
             print('best accuracy: {:.2f}'.format(best_acc1))
@@ -517,7 +517,7 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
     return losses.avg, top.avg
 
 
-def validate(val_loader, semeval_dataset, model, classifier, criterion, epoch, args):
+def validate(val_loader, semeval_dataset, semeval_df, model, classifier, criterion, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
     losses = AverageMeter('Loss', ':.3f')
     top = AverageMeter('Accuracy', ':.2f')
@@ -541,7 +541,8 @@ def validate(val_loader, semeval_dataset, model, classifier, criterion, epoch, a
         end = time.time()
 
         # sem eval validation
-        for i, _id in enumerate(semeval_dataset[4]):
+        for i, row_id in enumerate(semeval_dataset[4]):
+            _id = semeval_df.iloc[row_id].iid
 
             inputs = {"input_ids": semeval_dataset[0][i].unsqueeze(0).cuda(),
                       "attention_mask": semeval_dataset[1][i].unsqueeze(0).cuda(),
