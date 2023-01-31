@@ -7,6 +7,7 @@ import pickle
 import random
 import pandas as pd
 import warnings
+import numpy as np
 from transformers import AutoTokenizer
 import torch
 import torch.nn as nn
@@ -18,6 +19,7 @@ from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 import torch.multiprocessing as mp
 import torch.utils.data
 import torch.utils.data.distributed
+from sklearn.metrics import accuracy_score
 
 from preprocessing.semeval_dataset import get_balanced_dataset_three_labels, get_balanced_dataset_two_labels, \
     get_dataset_from_dataframe
@@ -201,8 +203,10 @@ def main_worker(gpu, ngpus_per_node, args):
         output_hidden_states=False,  # Whether the model returns all hidden-states.
     ), num_classes=2)
 
-    ckpt = torch.load(args.ckpt)
-    state_dict = ckpt['model']
+    state_dict = None
+    if args.ckpt != '':
+        ckpt = torch.load(args.ckpt)
+        state_dict = ckpt['model']
 
     if not torch.cuda.is_available():
         print('using CPU, this will be slow')
@@ -245,7 +249,9 @@ def main_worker(gpu, ngpus_per_node, args):
                           lr=args.learning_rate,
                           momentum=args.momentum,
                           weight_decay=args.weight_decay)
-    model.load_state_dict(state_dict)
+
+    if state_dict is not None:
+        model.load_state_dict(state_dict)
 
     # optionally resume from a checkpoint
     if args.resume:
@@ -270,6 +276,7 @@ def main_worker(gpu, ngpus_per_node, args):
             print("=> no checkpoint found at '{}'".format(args.resume))
 
     cudnn.benchmark = True
+    semeval_filename = None
 
     # construct data loader
     if args.dataset == 'DATASET_EVIDENCES':
@@ -297,11 +304,14 @@ def main_worker(gpu, ngpus_per_node, args):
         semeval_datafolder = os.path.join(args.data_folder, 'preprocessed', args.dataset)
         train_filename = os.path.join(semeval_datafolder, 'dataset_two_combined_training.pkl')
         dev_filename = os.path.join(semeval_datafolder, 'dataset_two_combined_validation.pkl')
+        semeval_filename = os.path.joins(semeval_datafolder, 'dataset_two_semeval_validation.pkl')
 
         training_data = pd.read_pickle(train_filename)
         training_data = training_data.reset_index(drop=True)
         dev_data = pd.read_pickle(dev_filename)
         dev_data = dev_data.reset_index(drop=True)
+        semeval_data = pd.read_pickle(semeval_filename)
+        semeval_data = semeval_data.reset_index(drop=True)
 
         train_dataset = get_dataset_from_dataframe(training_data,
                                                    tokenizer=tokenizer,
@@ -312,6 +322,12 @@ def main_worker(gpu, ngpus_per_node, args):
                                                         tokenizer=tokenizer,
                                                         args=args,
                                                         max_length=args.max_seq_length)
+
+        semeval_dataset = get_dataset_from_dataframe(semeval_data,
+                                                     tokenizer=tokenizer,
+                                                     args=args,
+                                                     max_length=args.max_seq_length)
+
     elif args.dataset == 'DATASET_ONE':
 
         semeval_datafolder = os.path.join(args.data_folder, 'preprocessed', args.dataset)
@@ -415,7 +431,7 @@ def main_worker(gpu, ngpus_per_node, args):
         print('epoch {}, total time {:.2f}, loss {:.2f}, accuracy {:.2f}'
               .format(epoch, time2 - time1, loss, train_acc))
 
-        _, acc = validate(validate_loader, model, classifier, criterion, epoch, args)
+        _, acc = validate(validate_loader, semeval_dataset, model, classifier, criterion, epoch, args)
         if acc > best_acc1:
             best_acc1 = acc
             print('best accuracy: {:.2f}'.format(best_acc1))
@@ -501,7 +517,7 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
     return losses.avg, top.avg
 
 
-def validate(val_loader, model, classifier, criterion, epoch, args):
+def validate(val_loader, semeval_dataset, model, classifier, criterion, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
     losses = AverageMeter('Loss', ':.3f')
     top = AverageMeter('Accuracy', ':.2f')
@@ -510,11 +526,59 @@ def validate(val_loader, model, classifier, criterion, epoch, args):
         [batch_time, losses, top],
         prefix="Epoch: [{}]".format(epoch))
 
+    semeval_batch_time = AverageMeter('Time', ':6.3f')
+    semeval_losses = AverageMeter('Loss', ':.3f')
+    semeval_progress = ProgressMeter(
+        len(semeval_dataset[4]),
+        [semeval_batch_time, semeval_losses],
+        prefix="Epoch: [{}]".format(epoch))
+
     # switch to validate mode
     model.eval()
     classifier.eval()
+    res = {"iid": [], "predicted": [], "gold_label": []}
     with torch.no_grad():
         end = time.time()
+
+        # sem eval validation
+        for i, _id in enumerate(semeval_dataset[4]):
+
+            inputs = {"input_ids": semeval_dataset[0][i].unsqueeze(0).cuda(),
+                      "attention_mask": semeval_dataset[1][i].unsqueeze(0).cuda(),
+                      "token_type_ids": semeval_dataset[2][i].unsqueeze(0).cuda()}
+
+            features = model(**inputs)
+            logits = classifier(features.detach())
+
+            loss = criterion(logits.view(-1, 2), semeval_dataset[3][i].view(-1))
+
+            # normalizes loss to account for batch accumulation
+            if args.gradient_accumulation_steps > 1:
+                loss = loss / args.gradient_accumulation_steps
+
+            semeval_losses.update(loss.item(), 1)
+
+            _, _pred = logits.topk(1, 1, True, True)
+            res["predicted"].append(_pred.item())
+            res["iid"].append(_id)
+            res["gold_label"].append(semeval_dataset[3][i].item())
+
+            # measure elapsed time
+            semeval_batch_time.update(time.time() - end)
+            end = time.time()
+
+            # print info
+            if (i + 1) % args.print_freq == 0:
+                semeval_progress.display(i)
+
+        results_df = pd.DataFrame(res)
+        results_df = results_df.groupby('iid').aggregate(list).reset_index()
+        results_df['_predicted'] = [1 if np.sum(row.predicted) > 0 else 0 for i, row in results_df.iterrows()]
+        results_df['_gold_label'] = [1 if np.sum(row.gold_label) > 0 else 0 for i, row in results_df.iterrows()]
+
+        acc = accuracy_score(results_df['_gold_label'], results_df['_predicted'], normalize=True)
+        print("Sem Eval Validation Accuracy: .3f" % acc)
+
         for idx, batch in enumerate(val_loader):
             bsz = batch[0].size(0)
 
@@ -549,7 +613,8 @@ def validate(val_loader, model, classifier, criterion, epoch, args):
             # print info
             if (idx + 1) % args.print_freq == 0:
                 progress.display(idx)
-    return losses.avg, top.avg
+
+    return losses.avg, acc
 
 
 if __name__ == '__main__':
