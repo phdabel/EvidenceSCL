@@ -426,16 +426,15 @@ def main_worker(gpu, ngpus_per_node, args):
         adjust_learning_rate(args, optimizer, epoch)
 
         time1 = time.time()
-        # loss, train_acc = train(train_loader, model, classifier, criterion, optimizer, epoch, args)
+        loss, train_acc = train(train_loader, model, classifier, criterion, optimizer, epoch, args)
         time2 = time.time()
-        # print('epoch {}, total time {:.2f}, loss {:.2f}, accuracy {:.2f}'
-        #       .format(epoch, time2 - time1, loss, train_acc))
+        print('epoch {}, total time {:.2f}, loss {:.2f}, accuracy {:.2f}'
+              .format(epoch, time2 - time1, loss, train_acc))
 
         _, acc = validate(validate_loader, semeval_dataset, all_ids, model, classifier, criterion, epoch, args)
         if acc > best_acc1:
             best_acc1 = acc
             print('best accuracy: {:.2f}'.format(best_acc1))
-
             save_file = os.path.join(args.save_folder, 'classifier_last.pth')
             save_model(classifier, optimizer, args, epoch, save_file, True)
 
