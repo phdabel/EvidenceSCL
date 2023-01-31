@@ -304,7 +304,7 @@ def main_worker(gpu, ngpus_per_node, args):
         semeval_datafolder = os.path.join(args.data_folder, 'preprocessed', args.dataset)
         train_filename = os.path.join(semeval_datafolder, 'dataset_two_combined_training.pkl')
         dev_filename = os.path.join(semeval_datafolder, 'dataset_two_combined_validation.pkl')
-        semeval_filename = os.path.joins(semeval_datafolder, 'dataset_two_semeval_validation.pkl')
+        semeval_filename = os.path.join(semeval_datafolder, 'dataset_two_semeval_validation.pkl')
 
         training_data = pd.read_pickle(train_filename)
         training_data = training_data.reset_index(drop=True)
