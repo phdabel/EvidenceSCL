@@ -22,7 +22,7 @@ from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from preprocessing.semeval_dataset import get_balanced_dataset_three_labels, get_balanced_dataset_two_labels, \
     get_dataset_from_dataframe
 from util import adjust_learning_rate, warmup_learning_rate, save_model, \
-    AverageMeter, ProgressMeter, NLIProcessor, load_and_cache_examples
+    AverageMeter, ProgressMeter, NLIProcessor, load_and_cache_examples, EarlyStopping
 from torch.utils.data import DataLoader
 from bert_model import PairSupConBert, BertForCL
 from losses import SupConLoss
@@ -379,12 +379,12 @@ def main_worker(gpu, ngpus_per_node, args):
         dev_data = pd.read_pickle(dev_filename)
         dev_data = dev_data.reset_index(drop=True)
 
-        train_dataset = get_dataset_from_dataframe(training_data,
+        train_dataset, _ = get_dataset_from_dataframe(training_data,
                                                    tokenizer=tokenizer,
                                                    args=args,
                                                    max_length=args.max_seq_length)
 
-        validation_dataset = get_dataset_from_dataframe(dev_data,
+        validation_dataset, _ = get_dataset_from_dataframe(dev_data,
                                                         tokenizer=tokenizer,
                                                         args=args,
                                                         max_length=args.max_seq_length)
@@ -400,12 +400,12 @@ def main_worker(gpu, ngpus_per_node, args):
         dev_data = pd.read_pickle(dev_filename)
         dev_data = dev_data.reset_index(drop=True)
 
-        train_dataset = get_dataset_from_dataframe(training_data,
+        train_dataset, _ = get_dataset_from_dataframe(training_data,
                                                    tokenizer=tokenizer,
                                                    args=args,
                                                    max_length=args.max_seq_length)
 
-        validation_dataset = get_dataset_from_dataframe(dev_data,
+        validation_dataset, _ = get_dataset_from_dataframe(dev_data,
                                                         tokenizer=tokenizer,
                                                         args=args,
                                                         max_length=args.max_seq_length)
@@ -420,12 +420,12 @@ def main_worker(gpu, ngpus_per_node, args):
         dev_data = pd.read_pickle(dev_filename)
         dev_data = dev_data.reset_index(drop=True)
 
-        train_dataset = get_dataset_from_dataframe(training_data,
+        train_dataset, _ = get_dataset_from_dataframe(training_data,
                                                    tokenizer=tokenizer,
                                                    args=args,
                                                    max_length=args.max_seq_length)
 
-        validation_dataset = get_dataset_from_dataframe(dev_data,
+        validation_dataset, _ = get_dataset_from_dataframe(dev_data,
                                                         tokenizer=tokenizer,
                                                         args=args,
                                                         max_length=args.max_seq_length)
@@ -487,6 +487,7 @@ def main_worker(gpu, ngpus_per_node, args):
     # handle - save each epoch
     # model_save_file = os.path.join(args.model_path, f'{args.model_name}.pt')
     # epoch_save_file = os.path.join(args.model_path, f'{args.model_name}_epoch_data.pt')
+    stopper = EarlyStopping()
 
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
@@ -506,6 +507,10 @@ def main_worker(gpu, ngpus_per_node, args):
         val_time2 = time.time()
         print('Validation epoch {}, total time {:.2f}, loss {:.7f}'.format(epoch, (val_time2 - val_time1), validation_loss))
 
+        stopper(loss, validation_loss)
+        if stopper.early_stop:
+            print("Early stop")
+            break
         
     # save the last model
     if not args.multiprocessing_distributed or (args.multiprocessing_distributed and args.rank % ngpus_per_node == 0):

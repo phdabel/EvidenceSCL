@@ -290,12 +290,12 @@ def main_worker(gpu, ngpus_per_node, args):
         dev_data = pd.read_pickle(dev_filename)
         dev_data = dev_data.reset_index(drop=True)
 
-        train_dataset = get_dataset_from_dataframe(training_data,
+        train_dataset, _ = get_dataset_from_dataframe(training_data,
                                                    tokenizer=tokenizer,
                                                    args=args,
                                                    max_length=args.max_seq_length)
 
-        validation_dataset = get_dataset_from_dataframe(dev_data,
+        validation_dataset, _ = get_dataset_from_dataframe(dev_data,
                                                         tokenizer=tokenizer,
                                                         args=args,
                                                         max_length=args.max_seq_length)
@@ -313,17 +313,17 @@ def main_worker(gpu, ngpus_per_node, args):
         semeval_data = pd.read_pickle(semeval_filename)
         semeval_data = semeval_data.reset_index(drop=True)
 
-        train_dataset = get_dataset_from_dataframe(training_data,
+        train_dataset, _ = get_dataset_from_dataframe(training_data,
                                                    tokenizer=tokenizer,
                                                    args=args,
                                                    max_length=args.max_seq_length)
 
-        validation_dataset = get_dataset_from_dataframe(dev_data,
+        validation_dataset, _ = get_dataset_from_dataframe(dev_data,
                                                         tokenizer=tokenizer,
                                                         args=args,
                                                         max_length=args.max_seq_length)
 
-        semeval_dataset = get_dataset_from_dataframe(semeval_data,
+        semeval_dataset, all_ids = get_dataset_from_dataframe(semeval_data,
                                                      tokenizer=tokenizer,
                                                      args=args,
                                                      max_length=args.max_seq_length)
@@ -339,12 +339,12 @@ def main_worker(gpu, ngpus_per_node, args):
         dev_data = pd.read_pickle(dev_filename)
         dev_data = dev_data.reset_index(drop=True)
 
-        train_dataset = get_dataset_from_dataframe(training_data,
+        train_dataset, _ = get_dataset_from_dataframe(training_data,
                                                    tokenizer=tokenizer,
                                                    args=args,
                                                    max_length=args.max_seq_length)
 
-        validation_dataset = get_dataset_from_dataframe(dev_data,
+        validation_dataset, _ = get_dataset_from_dataframe(dev_data,
                                                         tokenizer=tokenizer,
                                                         args=args,
                                                         max_length=args.max_seq_length)
@@ -431,7 +431,7 @@ def main_worker(gpu, ngpus_per_node, args):
         print('epoch {}, total time {:.2f}, loss {:.2f}, accuracy {:.2f}'
               .format(epoch, time2 - time1, loss, train_acc))
 
-        _, acc = validate(validate_loader, semeval_dataset, semeval_data, model, classifier, criterion, epoch, args)
+        _, acc = validate(validate_loader, semeval_dataset, all_ids, model, classifier, criterion, epoch, args)
         if acc > best_acc1:
             best_acc1 = acc
             print('best accuracy: {:.2f}'.format(best_acc1))
@@ -517,7 +517,7 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
     return losses.avg, top.avg
 
 
-def validate(val_loader, semeval_dataset, semeval_df, model, classifier, criterion, epoch, args):
+def validate(val_loader, semeval_dataset, semeval_ids, model, classifier, criterion, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
     losses = AverageMeter('Loss', ':.3f')
     top = AverageMeter('Accuracy', ':.2f')
@@ -541,8 +541,7 @@ def validate(val_loader, semeval_dataset, semeval_df, model, classifier, criteri
         end = time.time()
 
         # sem eval validation
-        for i, row_id in enumerate(semeval_dataset[4]):
-            _id = semeval_df.iloc[row_id].iid
+        for i, _id in enumerate(semeval_ids):
 
             inputs = {"input_ids": semeval_dataset[0][i].unsqueeze(0).cuda(),
                       "attention_mask": semeval_dataset[1][i].unsqueeze(0).cuda(),
@@ -615,7 +614,7 @@ def validate(val_loader, semeval_dataset, semeval_df, model, classifier, criteri
             if (idx + 1) % args.print_freq == 0:
                 progress.display(idx)
 
-    return losses.avg, acc
+    return np.mean(losses.avg, semeval_losses.avg), acc
 
 
 if __name__ == '__main__':
