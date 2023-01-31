@@ -532,6 +532,10 @@ def validate(val_loader, model, classifier, criterion, epoch, args):
             logits = classifier(features.detach())
             loss = criterion(logits.view(-1, 2), labels.view(-1))
 
+            # normalizes loss to account for batch accumulation
+            if args.gradient_accumulation_steps > 1:
+                loss = loss / args.gradient_accumulation_steps
+
             # update metric
             # print(logits)
             losses.update(loss.item(), bsz)

@@ -163,6 +163,11 @@ def validate(validation_loader, model, criterion_sup, criterion_ce, epoch, args)
             loss_sup = criterion_sup(feature2, batch[3])
             loss_ce = criterion_ce(feature1, batch[3])
             loss = loss_sup + args.alpha * loss_ce
+
+            # normalizes loss to account for batch accumulation
+            if args.gradient_accumulation_steps > 1:
+                loss = loss / args.gradient_accumulation_steps
+
             # update metric
             # print(logits)
             losses.update(loss.item(), bsz)
