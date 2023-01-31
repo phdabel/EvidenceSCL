@@ -376,10 +376,12 @@ def main_worker(gpu, ngpus_per_node, args):
 
         train_dataset = get_dataset_from_dataframe(training_data,
                                                    tokenizer=tokenizer,
+                                                   args=args,
                                                    max_length=args.max_seq_length)
 
         validation_dataset = get_dataset_from_dataframe(dev_data,
                                                         tokenizer=tokenizer,
+                                                        args=args,
                                                         max_length=args.max_seq_length)
 
     elif args.dataset == 'DATASET_TWO':
@@ -395,10 +397,12 @@ def main_worker(gpu, ngpus_per_node, args):
 
         train_dataset = get_dataset_from_dataframe(training_data,
                                                    tokenizer=tokenizer,
+                                                   args=args,
                                                    max_length=args.max_seq_length)
 
         validation_dataset = get_dataset_from_dataframe(dev_data,
                                                         tokenizer=tokenizer,
+                                                        args=args,
                                                         max_length=args.max_seq_length)
     elif args.dataset == 'DATASET_ONE':
 
@@ -413,10 +417,12 @@ def main_worker(gpu, ngpus_per_node, args):
 
         train_dataset = get_dataset_from_dataframe(training_data,
                                                    tokenizer=tokenizer,
+                                                   args=args,
                                                    max_length=args.max_seq_length)
 
         validation_dataset = get_dataset_from_dataframe(dev_data,
                                                         tokenizer=tokenizer,
+                                                        args=args,
                                                         max_length=args.max_seq_length)
 
     elif args.dataset == 'SEMEVAL23_RAW':
