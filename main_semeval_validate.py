@@ -543,11 +543,12 @@ def validate(val_loader, semeval_dataset, semeval_ids, model, classifier, criter
         for i, _id in enumerate(semeval_ids):
 
             batch = [
-                semeval_dataset[0][i].cuda(non_blocking=True),
-                semeval_dataset[1][i].cuda(non_blocking=True),
-                semeval_dataset[2][i].cuda(non_blocking=True),
-                semeval_dataset[3][i].cuda(non_blocking=True)
+                semeval_dataset[i][0].cuda(non_blocking=True),
+                semeval_dataset[i][1].cuda(non_blocking=True),
+                semeval_dataset[i][2].cuda(non_blocking=True),
+                semeval_dataset[i][3].cuda(non_blocking=True)
             ]
+
             inputs = {"input_ids": batch[0].unsqueeze(0),
                       "attention_mask": batch[1].unsqueeze(0),
                       "token_type_ids": batch[2].unsqueeze(0)}
@@ -566,7 +567,7 @@ def validate(val_loader, semeval_dataset, semeval_ids, model, classifier, criter
             _, _pred = logits.topk(1, 1, True, True)
             res["predicted"].append(_pred.item())
             res["iid"].append(_id)
-            res["gold_label"].append(semeval_dataset[3][i].item())
+            res["gold_label"].append(batch[3].item())
 
             # measure elapsed time
             semeval_batch_time.update(time.time() - end)
