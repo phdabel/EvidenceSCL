@@ -539,18 +539,23 @@ def validate(val_loader, semeval_dataset, semeval_ids, model, classifier, criter
     res = {"iid": [], "predicted": [], "gold_label": []}
     with torch.no_grad():
         end = time.time()
-
         # sem eval validation
         for i, _id in enumerate(semeval_ids):
 
-            inputs = {"input_ids": semeval_dataset[0][i].unsqueeze(0).to(args.gpu),
-                      "attention_mask": semeval_dataset[1][i].unsqueeze(0).to(args.gpu),
-                      "token_type_ids": semeval_dataset[2][i].unsqueeze(0).to(args.gpu)}
+            batch = [
+                semeval_dataset[0][i].cuda(non_blocking=True),
+                semeval_dataset[1][i].cuda(non_blocking=True),
+                semeval_dataset[2][i].cuda(non_blocking=True),
+                semeval_dataset[3][i].cuda(non_blocking=True)
+            ]
+            inputs = {"input_ids": batch[0].unsqueeze(0),
+                      "attention_mask": batch[1].unsqueeze(0),
+                      "token_type_ids": batch[2].unsqueeze(0)}
 
             features = model(**inputs)
             logits = classifier(features.detach())
 
-            loss = criterion(logits.view(-1, 2), semeval_dataset[3][i].to(args.gpu).view(-1))
+            loss = criterion(logits.view(-1, 2), batch[3].view(-1))
 
             # normalizes loss to account for batch accumulation
             if args.gradient_accumulation_steps > 1:
