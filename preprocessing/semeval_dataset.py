@@ -80,7 +80,7 @@ def get_dataset_from_dataframe(data, tokenizer, args, classdict=None, max_length
                             inputs['attention_mask'],
                             all_token_type_ids,
                             all_class_labels,
-                            all_ids), all_ids
+                            all_ids), all_iids
 
     return dataset
 

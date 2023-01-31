@@ -426,10 +426,10 @@ def main_worker(gpu, ngpus_per_node, args):
         adjust_learning_rate(args, optimizer, epoch)
 
         time1 = time.time()
-        loss, train_acc = train(train_loader, model, classifier, criterion, optimizer, epoch, args)
+        # loss, train_acc = train(train_loader, model, classifier, criterion, optimizer, epoch, args)
         time2 = time.time()
-        print('epoch {}, total time {:.2f}, loss {:.2f}, accuracy {:.2f}'
-              .format(epoch, time2 - time1, loss, train_acc))
+        # print('epoch {}, total time {:.2f}, loss {:.2f}, accuracy {:.2f}'
+        #       .format(epoch, time2 - time1, loss, train_acc))
 
         _, acc = validate(validate_loader, semeval_dataset, all_ids, model, classifier, criterion, epoch, args)
         if acc > best_acc1:
@@ -529,7 +529,7 @@ def validate(val_loader, semeval_dataset, semeval_ids, model, classifier, criter
     semeval_batch_time = AverageMeter('Time', ':6.3f')
     semeval_losses = AverageMeter('Loss', ':.3f')
     semeval_progress = ProgressMeter(
-        len(semeval_dataset[4]),
+        len(semeval_ids),
         [semeval_batch_time, semeval_losses],
         prefix="Epoch: [{}]".format(epoch))
 
