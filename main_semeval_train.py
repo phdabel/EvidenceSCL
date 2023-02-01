@@ -49,11 +49,11 @@ def parse_option():
                         help='use pre-trained model')
     parser.add_argument('--batch_size', type=int, default=8,
                         help='batch_size (default: 8)')
-    parser.add_argument('--gradient_accumulation_steps', type=int, default=64,
+    parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
                         help='number of updates steps to accumulate before performing a backward/update pass.')
-    parser.add_argument('--learning_rate', type=float, default=0.001,
-                        help='learning rate (default: 0.001)')
-    parser.add_argument('--weight_decay', type=float, default=1e-6,
+    parser.add_argument('--learning_rate', type=float, default=5e-5,
+                        help='learning rate (default: 5e-5)')
+    parser.add_argument('--weight_decay', type=float, default=0.1,
                         help='weight decay')  # weight decay is used as L2 regularization factor
 
     parser.add_argument('--momentum', type=float, default=0.9,
@@ -120,7 +120,7 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
         logfile=os.path.join(args.log_path, args.model_name + '_training.log'))
 
     l1_criterion = nn.L1Loss(reduction='mean')
-    scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=5, eta_min=1e-06)
+    scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=3, eta_min=3e-06)
 
     # switch to train mode
     model.train()
@@ -157,8 +157,8 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
             loss = loss / args.gradient_accumulation_steps
 
         # update metrics
-        sc_loss.update(loss_sup.item(), bsz)
-        ce_loss.update(loss_ce.item(), bsz)
+        sc_loss.update(loss_sup.item()/args.gradient_accumulation_steps, bsz)
+        ce_loss.update(loss_ce.item()/args.gradient_accumulation_steps, bsz)
         losses.update(loss.item(), bsz)
         learning.update(get_lr(optimizer), 1)
 
@@ -462,7 +462,7 @@ def main_worker(gpu, ngpus_per_node, args):
     # handle - save each epoch
     # model_save_file = os.path.join(args.model_path, f'{args.model_name}.pt')
     # epoch_save_file = os.path.join(args.model_path, f'{args.model_name}_epoch_data.pt')
-    stopper = EarlyStopping()
+    stopper = EarlyStopping(min_delta=1e-5)
 
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
