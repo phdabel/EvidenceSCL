@@ -2,8 +2,6 @@ import os
 import json
 import argparse
 import time
-import math
-import pickle
 import random
 import pandas as pd
 import warnings
@@ -23,8 +21,7 @@ from sklearn.metrics import accuracy_score
 
 from preprocessing.semeval_dataset import get_balanced_dataset_three_labels, get_balanced_dataset_two_labels, \
     get_dataset_from_dataframe
-from util import adjust_learning_rate, accuracy, warmup_learning_rate, \
-    save_model, AverageMeter, ProgressMeter, NLIProcessor, load_and_cache_examples
+from util import accuracy, save_model, AverageMeter, ProgressMeter
 from torch.utils.data import DataLoader
 from bert_model import BertForCL, LinearClassifier, PairSupConBert
 
@@ -37,8 +34,7 @@ def parse_option():
                         help="The maximum total input sequence length after tokenization. Sequences longer "
                              "than this will be truncated, sequences shorter will be padded.")
     parser.add_argument('--model', type=str, default='ROBERTA')
-    parser.add_argument('--dataset', type=str, default='SEMEVAL23',
-                        help='dataset')
+    parser.add_argument('--dataset', type=str, default='DATASET_TWO', help='dataset')
     parser.add_argument('--data_folder', type=str, default='./datasets', help='path to custom dataset')
 
     # training
@@ -53,12 +49,8 @@ def parse_option():
     parser.add_argument('--pretrained', dest='pretrained', action='store_true',
                         help='use pre-trained model')
     parser.add_argument('--batch_size', type=int, default=8, help='batch_size')
-    parser.add_argument('--learning_rate', type=float, default=5e-5,
+    parser.add_argument('--learning_rate', type=float, default=0.001,
                         help='learning rate')
-    parser.add_argument('--lr_decay_epochs', type=str, default='10,15',
-                        help='where to decay lr, can be a list')
-    parser.add_argument('--lr_decay_rate', type=float, default=0.1,
-                        help='decay rate for learning rate')
     parser.add_argument('--weight_decay', type=float, default=1e-6,
                         help='weight decay')  # weight decay corresponds to the L2 regularization factor
     parser.add_argument('--gradient_accumulation_steps', type=int, default=64,
@@ -67,8 +59,6 @@ def parse_option():
                         help='momentum')
     parser.add_argument('--print_freq', type=int, default=100,
                         help='print frequency')
-    parser.add_argument('--save_freq', type=int, default=5,
-                        help='save frequency')
 
     # distribute
     parser.add_argument('--world-size', default=-1, type=int,
@@ -88,50 +78,25 @@ def parse_option():
                              'which has N GPUs. This is the fastest way to use PyTorch for either single '
                              'node or multi node data parallel training')
     # parameters
-    parser.add_argument('--shuffle', action='store_true',
-                        help='shuffle dataloader')
-    parser.add_argument('--coefficient', type=float, default=0.01,
-                        help='L1 regularization coefficient')
-    parser.add_argument('--temp', type=float, default=0.05,
-                        help='temperature for loss function')
-    parser.add_argument('--cosine', action='store_true',
-                        help='using cosine annealing')
-    parser.add_argument('--warm', action='store_true',
-                        help='warm-up for large batch training')
+    parser.add_argument('--shuffle', action='store_true', help='shuffle dataloader')
+    parser.add_argument('--coefficient', type=float, default=0.01, help='L1 regularization coefficient.')
+    parser.add_argument('--temp', type=float, default=0.05, help='temperature for loss function')
     parser.add_argument('--ckpt', type=str, default='', help="path to pre-trained model")
     args = parser.parse_args()
 
     args.model_path = './save/{}_models'.format(args.dataset)
 
-    iterations = args.lr_decay_epochs.split(',')
-    args.lr_decay_epochs = list([])
-    for it in iterations:
-        args.lr_decay_epochs.append(int(it))
-
-    args.model_name = '{}_{}_lr_{}_decay_{}_bsz_{}_temp_{}'.\
-        format(args.dataset, args.model, args.learning_rate,
-               args.weight_decay, args.batch_size, args.temp)
-
-    if args.cosine:
-        args.model_name = '{}_cosine'.format(args.model_name)
-
-    # warm-up for large-batch training,
-    if args.batch_size > 256:
-        args.warm = True
-    if args.warm:
-        args.model_name = '{}_warm'.format(args.model_name)
-        args.warmup_from = 0.01
-        args.warm_epochs = 10
-        if args.cosine:
-            eta_min = args.learning_rate * (args.lr_decay_rate ** 3)
-            args.warmup_to = eta_min + (args.learning_rate - eta_min) * (
-                    1 + math.cos(math.pi * args.warm_epochs / args.epochs)) / 2
-        else:
-            args.warmup_to = args.learning_rate
+    args.model_name = '{}_{}_lr_{}_decay_{}_bsz_{}_grad_{}_temp_{}_l1_coefficient_{}'.\
+        format(args.dataset, args.model, args.learning_rate, args.weight_decay, args.batch_size,
+               args.gradient_accumulation_steps, args.temp, args.coefficient)
 
     args.save_folder = os.path.join(args.model_path, args.model_name)
     if not os.path.isdir(args.save_folder):
         os.makedirs(args.save_folder)
+
+    args.log_path = os.path.join(args.data_folder, 'logs')
+    if not os.path.isdir(args.log_path):
+        os.makedirs(args.log_path)
 
     return args
 
@@ -276,7 +241,6 @@ def main_worker(gpu, ngpus_per_node, args):
             print("=> no checkpoint found at '{}'".format(args.resume))
 
     cudnn.benchmark = True
-    semeval_filename = None
 
     # construct data loader
     if args.dataset == 'DATASET_EVIDENCES':
@@ -291,14 +255,14 @@ def main_worker(gpu, ngpus_per_node, args):
         dev_data = dev_data.reset_index(drop=True)
 
         train_dataset, _ = get_dataset_from_dataframe(training_data,
-                                                   tokenizer=tokenizer,
-                                                   args=args,
-                                                   max_length=args.max_seq_length)
+                                                      tokenizer=tokenizer,
+                                                      args=args,
+                                                      max_length=args.max_seq_length)
 
         validation_dataset, _ = get_dataset_from_dataframe(dev_data,
-                                                        tokenizer=tokenizer,
-                                                        args=args,
-                                                        max_length=args.max_seq_length)
+                                                           tokenizer=tokenizer,
+                                                           args=args,
+                                                           max_length=args.max_seq_length)
     elif args.dataset == 'DATASET_TWO':
 
         semeval_datafolder = os.path.join(args.data_folder, 'preprocessed', args.dataset)
@@ -385,24 +349,7 @@ def main_worker(gpu, ngpus_per_node, args):
                                                   tokenizer=tokenizer,
                                                   max_length=args.max_seq_length)
 
-    elif args.dataset == 'MNLI' or args.dataset == 'SNLI':
-
-        train_file = os.path.join(args.data_folder, "preprocessed", args.dataset, "train_data.pkl")
-        dev_file = os.path.join(args.data_folder, "preprocessed", args.dataset, "matched_dev_data.pkl")
-
-        print("load dataset")
-        with open(train_file, "rb") as pkl:
-            processor = NLIProcessor(pickle.load(pkl))
-
-        train_dataset = load_and_cache_examples(args, processor, tokenizer, "train", args.dataset)
-
-        with open(dev_file, "rb") as pkl:
-            validation_processor = NLIProcessor(pickle.load(pkl))
-
-        validation_dataset = load_and_cache_examples(args, validation_processor, tokenizer, "validate", args.dataset)
-
     else:
-
         raise ValueError('dataset not supported: {}'.format(args.dataset))
 
     if args.distributed:
@@ -423,8 +370,6 @@ def main_worker(gpu, ngpus_per_node, args):
             train_sampler.set_epoch(epoch)
             validation_sampler.set_epoch(epoch)
 
-        adjust_learning_rate(args, optimizer, epoch)
-
         time1 = time.time()
         loss, train_acc = train(train_loader, model, classifier, criterion, optimizer, epoch, args)
         time2 = time.time()
@@ -436,7 +381,7 @@ def main_worker(gpu, ngpus_per_node, args):
             save_file = os.path.join(args.save_folder, 'classifier_epoch_%d.pth' % epoch)
             save_model(classifier, optimizer, args, epoch, save_file, False)
 
-        _, acc = validate(validate_loader, semeval_dataset, all_ids, model, classifier, criterion, epoch, args)
+        validation_loss, acc = validate(validate_loader, semeval_dataset, all_ids, model, classifier, criterion, epoch, args)
         if acc > best_acc1:
             best_acc1 = acc
             print('best accuracy: {:.2f}'.format(best_acc1))
@@ -458,7 +403,8 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
     progress = ProgressMeter(
         len(train_loader),
         [batch_time, data_time, losses, top],
-        prefix="Epoch: [{}]".format(epoch))
+        prefix="Epoch: [{}]".format(epoch),
+        logfile=os.path.join(args.log_path, args.model + '_training.log'))
 
     l1_criterion = nn.L1Loss(reduction='mean')
     scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=5, eta_min=1e-06)
@@ -475,9 +421,6 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
         if args.gpu is not None:
             for i in range(1, len(batch)):
                 batch[i] = batch[i].cuda(args.gpu, non_blocking=True)
-
-        # warm-up learning rate
-        # warmup_learning_rate(args, epoch, idx, len(train_loader), optimizer)
 
         # compute loss
         batch = tuple(t.cuda() for t in batch)
@@ -515,6 +458,8 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
         batch_time.update(time.time() - end)
         end = time.time()
 
+        progress.log_metrics(idx)
+
         # print info
         if (idx + 1) % args.print_freq == 0:
             progress.display(idx)
@@ -528,14 +473,16 @@ def validate(val_loader, semeval_dataset, semeval_ids, model, classifier, criter
     progress = ProgressMeter(
         len(val_loader),
         [batch_time, losses, top],
-        prefix="Epoch: [{}]".format(epoch))
+        prefix="Epoch: [{}]".format(epoch),
+        logfile=os.path.join(args.log_path, args.model + '_validation.log'))
 
     semeval_batch_time = AverageMeter('Time', ':6.3f')
     semeval_losses = AverageMeter('Loss', ':.3f')
     semeval_progress = ProgressMeter(
         len(semeval_ids),
         [semeval_batch_time, semeval_losses],
-        prefix="Epoch: [{}]".format(epoch))
+        prefix="Epoch: [{}]".format(epoch),
+        logfile=os.path.join(args.log_path, args.model + '_semeval_validation.log'))
 
     # switch to validate mode
     model.eval()
@@ -577,6 +524,8 @@ def validate(val_loader, semeval_dataset, semeval_ids, model, classifier, criter
             semeval_batch_time.update(time.time() - end)
             end = time.time()
 
+            semeval_progress.log_metrics(i)
+
             # print info
             if (i + 1) % args.print_freq == 0:
                 semeval_progress.display(i)
@@ -588,6 +537,7 @@ def validate(val_loader, semeval_dataset, semeval_ids, model, classifier, criter
 
         acc = accuracy_score(results_df['_gold_label'], results_df['_predicted'], normalize=True)
         print(f'Sem Eval Validation Accuracy: {acc:.3f}')
+        acc = torch.tensor([float(acc*100)]).cuda()
 
         for idx, batch in enumerate(val_loader):
             bsz = batch[0].size(0)
@@ -620,11 +570,13 @@ def validate(val_loader, semeval_dataset, semeval_ids, model, classifier, criter
             batch_time.update(time.time() - end)
             end = time.time()
 
+            progress.log_metrics(idx)
+
             # print info
             if (idx + 1) % args.print_freq == 0:
                 progress.display(idx)
 
-    return np.mean(losses.avg, semeval_losses.avg), acc
+    return np.mean([losses.avg, semeval_losses.avg]), acc
 
 
 if __name__ == '__main__':

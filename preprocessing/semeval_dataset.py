@@ -59,10 +59,8 @@ def get_dataset_from_dataframe(data, tokenizer, args, classdict=None, max_length
         return_token_type_ids=False,
         return_attention_mask=True,
         return_tensors='pt')
-
     # if not train:
     # all_evidence_labels = torch.tensor([sample.evidence_label for i, sample in data.iterrows()], dtype=torch.long)
-
     if args.dataset != 'DATASET_EVIDENCES':
         all_class_labels = torch.tensor([classdict[sample.class_label] for i, sample in data.iterrows()],
                                         dtype=torch.long)
@@ -83,6 +81,7 @@ def get_dataset_from_dataframe(data, tokenizer, args, classdict=None, max_length
                             all_ids), all_iids
 
     return dataset
+
 
 def get_balanced_dataset_three_labels(data, tokenizer, max_length=128):
     # agrupa por rótulo de classe

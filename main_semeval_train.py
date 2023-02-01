@@ -2,9 +2,7 @@ import os
 import argparse
 import random
 import time
-import math
 import json
-import pickle
 import warnings
 import numpy as np
 import pandas as pd
@@ -21,8 +19,7 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from preprocessing.semeval_dataset import get_balanced_dataset_three_labels, get_balanced_dataset_two_labels, \
     get_dataset_from_dataframe
-from util import adjust_learning_rate, warmup_learning_rate, save_model, \
-    AverageMeter, ProgressMeter, NLIProcessor, load_and_cache_examples, EarlyStopping
+from util import save_model, AverageMeter, ProgressMeter, EarlyStopping
 from torch.utils.data import DataLoader
 from bert_model import PairSupConBert, BertForCL
 from losses import SupConLoss
@@ -35,13 +32,14 @@ def parse_option():
                         help="The maximum total input sequence length after tokenization. "
                              "Sequences longer than this will be truncated, sequences shorter will be padded.")
     parser.add_argument('--model', type=str, default='ROBERTA')
-    parser.add_argument('--dataset', type=str, default='SEMEVAL23',
+    parser.add_argument('--dataset', type=str, default='DATASET_TWO',
                         help='dataset')
-    parser.add_argument('--data_folder', type=str, default='./datasets', help='path to custom dataset')
+    parser.add_argument('--data_folder', type=str, default='./datasets',
+                        help='path to custom dataset')
     # training
     parser.add_argument('--workers', default=2, type=int, metavar='N',
                         help='number of data loading workers (default: 2)')
-    parser.add_argument('--epochs', default=20, type=int, metavar='N',
+    parser.add_argument('--epochs', default=10, type=int, metavar='N',
                         help='number of total epochs to run')
     parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                         help='manual epoch number (useful on restarts)')
@@ -49,18 +47,15 @@ def parse_option():
                         help='path to latest checkpoint (default: none)')
     parser.add_argument('--pretrained', dest='pretrained', action='store_true',
                         help='use pre-trained model')
-    parser.add_argument('--batch_size', type=int, default=16,
-                        help='batch_size (default: 64)')
-    parser.add_argument('--learning_rate', type=float, default=5e-5,
-                        help='learning rate (default: 5e-5)')
-    parser.add_argument('--lr_decay_epochs', type=str, default='5,8',
-                        help='where to decay lr, can be a list')
-    parser.add_argument('--lr_decay_rate', type=float, default=0.01,
-                        help='decay rate for learning rate')
-    parser.add_argument('--weight_decay', type=float, default=1e-6,
-                        help='weight decay')  # weight decay corresponds to L2 regularization factor
+    parser.add_argument('--batch_size', type=int, default=8,
+                        help='batch_size (default: 8)')
     parser.add_argument('--gradient_accumulation_steps', type=int, default=64,
                         help='number of updates steps to accumulate before performing a backward/update pass.')
+    parser.add_argument('--learning_rate', type=float, default=0.001,
+                        help='learning rate (default: 0.001)')
+    parser.add_argument('--weight_decay', type=float, default=1e-6,
+                        help='weight decay')  # weight decay is used as L2 regularization factor
+
     parser.add_argument('--momentum', type=float, default=0.9,
                         help='momentum')
     parser.add_argument('--print_freq', type=int, default=100,
@@ -91,95 +86,24 @@ def parse_option():
                         help='L1 regularization coefficient')
     parser.add_argument('--temp', type=float, default=0.05,
                         help='temperature for loss function (default: 0.05)')
-    parser.add_argument('--cosine', action='store_true',
-                        help='using cosine annealing')
     parser.add_argument('--eta', type=float, default=1e-5,
                         help='minimum value')
-    parser.add_argument('--warm', action='store_true',
-                        help='warm-up for large batch training')
     args = parser.parse_args()
+
     args.model_path = './save/{}_models'.format(args.dataset)
-    iterations = args.lr_decay_epochs.split(',')
-    args.lr_decay_epochs = list([])
-    for it in iterations:
-        args.lr_decay_epochs.append(int(it))
-
-    args.model_name = '{}_{}_lr_{}_decay_{}_bsz_{}_temp_{}'.\
-        format(args.dataset, args.model, args.learning_rate,
-               args.weight_decay, args.batch_size, args.temp)
-
-    if args.cosine:
-        args.model_name = '{}_cosine'.format(args.model_name)
-
-    # warm-up for large-batch training,
-    if args.batch_size > 256:
-        args.warm = True
-    if args.warm:
-        args.model_name = '{}_warm'.format(args.model_name)
-        args.warmup_from = 0.01
-        args.warm_epochs = 10
-        if args.cosine:
-            eta_min = args.learning_rate * (args.lr_decay_rate ** 3)
-            args.warmup_to = eta_min + (args.learning_rate - eta_min) * (
-                    1 + math.cos(math.pi * args.warm_epochs / args.epochs)) / 2
-        else:
-            args.warmup_to = args.learning_rate
+    args.model_name = '{}_{}_lr_{}_decay_{}_bsz_{}_grad_{}_temp_{}_l1_coefficient_{}_alpha_{}'. \
+        format(args.dataset, args.model, args.learning_rate, args.weight_decay, args.batch_size,
+               args.gradient_accumulation_steps, args.temp, args.coefficient, args.alpha)
 
     args.save_folder = os.path.join(args.model_path, args.model_name)
     if not os.path.isdir(args.save_folder):
         os.makedirs(args.save_folder)
 
+    args.log_path = os.path.join(args.data_folder, 'logs')
+    if not os.path.isdir(args.log_path):
+        os.makedirs(args.log_path)
+
     return args
-
-
-def validate(validation_loader, model, criterion_sup, criterion_ce, epoch, args):
-    batch_time = AverageMeter('Time', ':6.3f')
-    data_time = AverageMeter('Data', ':6.3f')
-    losses = AverageMeter('Loss', ':6.7f')
-    progress = ProgressMeter(
-        len(validation_loader),
-        [batch_time, data_time, losses],
-        prefix="Epoch: [{}]".format(epoch)
-    )
-
-    # switch to eval mode
-    model.eval()
-    with torch.no_grad():
-        end = time.time()
-        for idx, batch in enumerate(validation_loader):
-            bsz = batch[0].size(0)
-
-            if args.gpu is not None:
-                for i in range(1, len(batch)):
-                    batch[i] = batch[i].cuda(args.gpu, non_blocking=True)
-
-            # compute loss
-            batch = tuple(t.cuda() for t in batch)
-            inputs = {"input_ids": batch[0],
-                      "attention_mask": batch[1],
-                      "token_type_ids": batch[2]}
-            feature1, feature2 = model(**inputs)
-
-            loss_sup = criterion_sup(feature2, batch[3])
-            loss_ce = criterion_ce(feature1, batch[3])
-            loss = loss_sup + args.alpha * loss_ce
-
-            # normalizes loss to account for batch accumulation
-            if args.gradient_accumulation_steps > 1:
-                loss = loss / args.gradient_accumulation_steps
-
-            # update metric
-            # print(logits)
-            losses.update(loss.item(), bsz)
-
-            # measure elapsed time
-            batch_time.update(time.time() - end)
-            end = time.time()
-
-            # print info
-            if (idx + 1) % args.print_freq == 0:
-                progress.display(idx)
-    return losses.avg
 
 
 def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, args):
@@ -189,7 +113,8 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
     progress = ProgressMeter(
         len(train_loader),
         [batch_time, data_time, losses],
-        prefix="Epoch: [{}]".format(epoch))
+        prefix="Epoch: [{}]".format(epoch),
+        logfile=os.path.join(args.log_path, args.model + '_training.log'))
 
     l1_criterion = nn.L1Loss(reduction='mean')
     scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=5, eta_min=1e-06)
@@ -243,9 +168,65 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
         batch_time.update(time.time() - end)
         end = time.time()
 
+        # log file
+        progress.log_metrics(idx)
+
         # print info
         if (idx + 1) % args.print_freq == 0:
             progress.display(idx)
+    return losses.avg
+
+
+def validate(validation_loader, model, criterion_sup, criterion_ce, epoch, args):
+    batch_time = AverageMeter('Time', ':6.3f')
+    data_time = AverageMeter('Data', ':6.3f')
+    losses = AverageMeter('Loss', ':6.7f')
+    progress = ProgressMeter(
+        len(validation_loader),
+        [batch_time, data_time, losses],
+        prefix="Epoch: [{}]".format(epoch),
+        logfile=os.path.join(args.log_path, args.model + '_validation.log')
+    )
+
+    # switch to eval mode
+    model.eval()
+    with torch.no_grad():
+        end = time.time()
+        for idx, batch in enumerate(validation_loader):
+            bsz = batch[0].size(0)
+
+            if args.gpu is not None:
+                for i in range(1, len(batch)):
+                    batch[i] = batch[i].cuda(args.gpu, non_blocking=True)
+
+            # compute loss
+            batch = tuple(t.cuda() for t in batch)
+            inputs = {"input_ids": batch[0],
+                      "attention_mask": batch[1],
+                      "token_type_ids": batch[2]}
+            feature1, feature2 = model(**inputs)
+
+            loss_sup = criterion_sup(feature2, batch[3])
+            loss_ce = criterion_ce(feature1, batch[3])
+            loss = loss_sup + args.alpha * loss_ce
+
+            # normalizes loss to account for batch accumulation
+            if args.gradient_accumulation_steps > 1:
+                loss = loss / args.gradient_accumulation_steps
+
+            # update metric
+            # print(logits)
+            losses.update(loss.item(), bsz)
+
+            # measure elapsed time
+            batch_time.update(time.time() - end)
+            end = time.time()
+
+            progress.log_metrics(idx)
+
+            # print info
+            if (idx + 1) % args.print_freq == 0:
+                progress.display(idx)
     return losses.avg
 
 
@@ -452,16 +433,6 @@ def main_worker(gpu, ngpus_per_node, args):
         train_dataset = get_balanced_dataset_three_labels(training_data,
                                                           tokenizer=tokenizer,
                                                           max_length=args.max_seq_length)
-
-    elif args.dataset == 'SNLI' or args.dataset == "MNLI":
-        train_file = os.path.join(args.data_folder, "preprocessed", args.dataset, "train_data.pkl")
-
-        print("load dataset")
-        with open(train_file, "rb") as pkl:
-            processor = NLIProcessor(pickle.load(pkl))
-
-        train_dataset = load_and_cache_examples(args, processor, tokenizer, "train", args.dataset)
-
     else:
         raise ValueError('dataset not supported: {}'.format(args.dataset))
 
@@ -482,8 +453,6 @@ def main_worker(gpu, ngpus_per_node, args):
         validation_loader = DataLoader(validation_dataset, batch_size=args.batch_size, shuffle=shuffle,
                                        num_workers=args.workers, pin_memory=True, sampler=validation_sampler)
 
-
-
     # handle - save each epoch
     # model_save_file = os.path.join(args.model_path, f'{args.model_name}.pt')
     # epoch_save_file = os.path.join(args.model_path, f'{args.model_name}_epoch_data.pt')
@@ -494,8 +463,6 @@ def main_worker(gpu, ngpus_per_node, args):
             train_sampler.set_epoch(epoch)
             if validation_dataset is not None:
                 validation_sampler.set_epoch(epoch)
-
-        adjust_learning_rate(args, optimizer, epoch)
 
         time1 = time.time()
         loss = train(train_loader, model, criterion_supcon, criterion_ce, optimizer, epoch, args)
