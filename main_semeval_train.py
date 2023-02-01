@@ -157,7 +157,7 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
             loss = loss / args.gradient_accumulation_steps
 
         # update metrics
-        sc_loss.update(loss.sup.item(), bsz)
+        sc_loss.update(loss_sup.item(), bsz)
         ce_loss.update(loss_ce.item(), bsz)
         losses.update(loss.item(), bsz)
         learning.update(get_lr(optimizer), 1)
