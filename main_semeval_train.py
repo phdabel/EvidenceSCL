@@ -19,7 +19,7 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from preprocessing.semeval_dataset import get_balanced_dataset_three_labels, get_balanced_dataset_two_labels, \
     get_dataset_from_dataframe
-from util import save_model, AverageMeter, ProgressMeter, EarlyStopping
+from util import save_model, AverageMeter, ProgressMeter, EarlyStopping, get_lr
 from torch.utils.data import DataLoader
 from bert_model import PairSupConBert, BertForCL
 from losses import SupConLoss
@@ -109,12 +109,15 @@ def parse_option():
 def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
-    losses = AverageMeter('Loss', ':6.7f')
+    learning = AverageMeter('Learning Rate', ':1.5f')
+    sc_loss = AverageMeter('SC Loss', ':2.5f')
+    ce_loss = AverageMeter('CE Loss', ':2.5f')
+    losses = AverageMeter('Overall Loss', ':6.7f')
     progress = ProgressMeter(
         len(train_loader),
-        [batch_time, data_time, losses],
+        [batch_time, data_time, learning, sc_loss, ce_loss, losses],
         prefix="Epoch: [{}]".format(epoch),
-        logfile=os.path.join(args.log_path, args.model + '_training.log'))
+        logfile=os.path.join(args.log_path, args.model_name + '_training.log'))
 
     l1_criterion = nn.L1Loss(reduction='mean')
     scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=5, eta_min=1e-06)
@@ -154,7 +157,10 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
             loss = loss / args.gradient_accumulation_steps
 
         # update metrics
+        sc_loss.update(loss.sup.item(), bsz)
+        ce_loss.update(loss_ce.item(), bsz)
         losses.update(loss.item(), bsz)
+        learning.update(get_lr(optimizer), 1)
 
         # AdamW
         loss.backward()
@@ -185,7 +191,7 @@ def validate(validation_loader, model, criterion_sup, criterion_ce, epoch, args)
         len(validation_loader),
         [batch_time, data_time, losses],
         prefix="Epoch: [{}]".format(epoch),
-        logfile=os.path.join(args.log_path, args.model + '_validation.log')
+        logfile=os.path.join(args.log_path, args.model_name + '_validation.log')
     )
 
     # switch to eval mode

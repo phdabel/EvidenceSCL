@@ -84,6 +84,7 @@ class ProgressMeter(object):
         self.meters = meters
         self.prefix = prefix
         self.logfile = logfile
+        self.header = False
 
     def display(self, batch):
         entries = [self.prefix + self.batch_fmtstr.format(batch)]
@@ -100,9 +101,9 @@ class ProgressMeter(object):
             entries[metric] = float(value)
 
         with open(self.logfile, 'a') as filename:
-            if epoch == 0:
-                header = sep.join([key for key in entries.keys()]) + '\n'
-                filename.write(header)
+            if not self.header and epoch == 0:
+                self.header = sep.join([key for key in entries.keys()]) + '\n'
+                filename.write(self.header)
             content = sep.join([str(entries[key]) for key in entries.keys()]) + '\n'
             filename.write(content)
         filename.close()

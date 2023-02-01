@@ -21,7 +21,7 @@ from sklearn.metrics import accuracy_score
 
 from preprocessing.semeval_dataset import get_balanced_dataset_three_labels, get_balanced_dataset_two_labels, \
     get_dataset_from_dataframe
-from util import accuracy, save_model, AverageMeter, ProgressMeter
+from util import accuracy, save_model, AverageMeter, ProgressMeter, get_lr
 from torch.utils.data import DataLoader
 from bert_model import BertForCL, LinearClassifier, PairSupConBert
 
@@ -399,12 +399,13 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':.3f')
+    learning = AverageMeter('Learning Rate', ':.5f')
     top = AverageMeter('Accuracy', ':.2f')
     progress = ProgressMeter(
         len(train_loader),
-        [batch_time, data_time, losses, top],
+        [batch_time, data_time, learning, losses, top],
         prefix="Epoch: [{}]".format(epoch),
-        logfile=os.path.join(args.log_path, args.model + '_training.log'))
+        logfile=os.path.join(args.log_path, args.model_name + '_training.log'))
 
     l1_criterion = nn.L1Loss(reduction='mean')
     scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=5, eta_min=1e-06)
@@ -448,6 +449,8 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
         acc1 = accuracy(logits, labels)
         top.update(acc1[0].item(), bsz)
 
+        learning.update(get_lr(optimizer), 1)
+
         # SGD
         if ((idx + 1) % args.gradient_accumulation_steps) == 0 or (idx + 1) == len(train_loader):
             optimizer.step()
@@ -474,7 +477,7 @@ def validate(val_loader, semeval_dataset, semeval_ids, model, classifier, criter
         len(val_loader),
         [batch_time, losses, top],
         prefix="Epoch: [{}]".format(epoch),
-        logfile=os.path.join(args.log_path, args.model + '_validation.log'))
+        logfile=os.path.join(args.log_path, args.model_name + '_validation.log'))
 
     semeval_batch_time = AverageMeter('Time', ':6.3f')
     semeval_losses = AverageMeter('Loss', ':.3f')
@@ -482,7 +485,7 @@ def validate(val_loader, semeval_dataset, semeval_ids, model, classifier, criter
         len(semeval_ids),
         [semeval_batch_time, semeval_losses],
         prefix="Epoch: [{}]".format(epoch),
-        logfile=os.path.join(args.log_path, args.model + '_semeval_validation.log'))
+        logfile=os.path.join(args.log_path, args.model_name + '_semeval_validation.log'))
 
     # switch to validate mode
     model.eval()
