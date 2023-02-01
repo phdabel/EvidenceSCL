@@ -90,7 +90,7 @@ def parse_option():
     # parameters
     parser.add_argument('--shuffle', action='store_true',
                         help='shuffle dataloader')
-    parser.add_argument('--coefficient', type=float, default=0.001,
+    parser.add_argument('--coefficient', type=float, default=0.01,
                         help='L1 regularization coefficient')
     parser.add_argument('--temp', type=float, default=0.05,
                         help='temperature for loss function')
@@ -431,6 +431,11 @@ def main_worker(gpu, ngpus_per_node, args):
         print('epoch {}, total time {:.2f}, loss {:.2f}, accuracy {:.2f}'
               .format(epoch, time2 - time1, loss, train_acc))
 
+        if not args.multiprocessing_distributed or (args.multiprocessing_distributed
+                                                    and args.rank % ngpus_per_node == 0):
+            save_file = os.path.join(args.save_folder, 'classifier_epoch_%d.pth' % epoch)
+            save_model(classifier, optimizer, args, epoch, save_file, False)
+
         _, acc = validate(validate_loader, semeval_dataset, all_ids, model, classifier, criterion, epoch, args)
         if acc > best_acc1:
             best_acc1 = acc
@@ -500,7 +505,7 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
         acc1 = accuracy(logits, labels)
         top.update(acc1[0].item(), bsz)
 
-        # AdamW
+        # SGD
         if ((idx + 1) % args.gradient_accumulation_steps) == 0 or (idx + 1) == len(train_loader):
             optimizer.step()
             scheduler.step((epoch + idx) / len(train_loader))

@@ -12,6 +12,8 @@ import shutil
 
 
 class EarlyStopping:
+    # inspiried in
+    # https://stackoverflow.com/questions/71998978/early-stopping-in-pytorch/71999355#71999355
     def __init__(self, tolerance=5, min_delta=1e-5):
 
         self.tolerance = tolerance
