@@ -59,6 +59,8 @@ def parse_option():
                         help='momentum')
     parser.add_argument('--print_freq', type=int, default=100,
                         help='print frequency')
+    parser.add_argument('--log_epochs', type=str, default='0',
+                        help='which epochs to log, can be a list')
 
     # distribute
     parser.add_argument('--world-size', default=-1, type=int,
@@ -93,6 +95,12 @@ def parse_option():
     args.save_folder = os.path.join(args.model_path, args.model_name)
     if not os.path.isdir(args.save_folder):
         os.makedirs(args.save_folder)
+
+    try:
+        args.log_epochs = [int(i) for i in args.log_epochs.split(',')]
+    except ValueError:
+        print("invalid log_epochs value")
+        args.log_epochs = [0]
 
     args.log_path = os.path.join(args.data_folder, 'logs')
     if not os.path.isdir(args.log_path):
@@ -461,7 +469,8 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
         batch_time.update(time.time() - end)
         end = time.time()
 
-        progress.log_metrics(idx)
+        if epoch in args.log_epochs:
+            progress.log_metrics(idx)
 
         # print info
         if (idx + 1) % args.print_freq == 0:
@@ -527,7 +536,8 @@ def validate(val_loader, semeval_dataset, semeval_ids, model, classifier, criter
             semeval_batch_time.update(time.time() - end)
             end = time.time()
 
-            semeval_progress.log_metrics(i)
+            if epoch in args.log_epochs:
+                semeval_progress.log_metrics(i)
 
             # print info
             if (i + 1) % args.print_freq == 0:
@@ -573,7 +583,8 @@ def validate(val_loader, semeval_dataset, semeval_ids, model, classifier, criter
             batch_time.update(time.time() - end)
             end = time.time()
 
-            progress.log_metrics(idx)
+            if epoch in args.log_epochs:
+                progress.log_metrics(idx)
 
             # print info
             if (idx + 1) % args.print_freq == 0:
