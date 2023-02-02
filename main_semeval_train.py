@@ -20,7 +20,7 @@ from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from preprocessing.semeval_dataset import get_balanced_dataset_three_labels, get_balanced_dataset_two_labels, \
     get_dataset_from_dataframe
 from util import save_model, AverageMeter, ProgressMeter, EarlyStopping, get_lr
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, ConcatDataset
 from bert_model import PairSupConBert, BertForCL
 from losses import SupConLoss
 
@@ -51,17 +51,19 @@ def parse_option():
                         help='batch_size (default: 8)')
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
                         help='number of updates steps to accumulate before performing a backward/update pass.')
-    parser.add_argument('--learning_rate', type=float, default=5e-5,
-                        help='learning rate (default: 5e-5)')
-    parser.add_argument('--weight_decay', type=float, default=0.1,
-                        help='weight decay')  # weight decay is used as L2 regularization factor
+    parser.add_argument('--learning_rate', type=float, default=0.001,
+                        help='learning rate (default: 0.001)')
+    parser.add_argument('--coefficient', type=float, default=0.1,
+                        help='L1 regularization coefficient')  # L1 coefficient
+    parser.add_argument('--weight_decay', type=float, default=0.4,
+                        help='weight decay')  # weight decay is used as L2 regularization factor in AdamW
 
     parser.add_argument('--momentum', type=float, default=0.9,
                         help='momentum')
     parser.add_argument('--print_freq', type=int, default=100,
                         help='print frequency')
-    parser.add_argument('--log_epochs', type=str, default='0',
-                        help='which epochs to log, can be a list')
+    parser.add_argument('--log_epochs', action='store_true',
+                        help='Create a CSV file to log the metrics.')
     # distribute
     parser.add_argument('--world-size', default=-1, type=int,
                         help='number of nodes for distributed training')
@@ -84,10 +86,8 @@ def parse_option():
                         help='shuffle dataloader')
     parser.add_argument('--alpha', type=float, default=1.0,
                         help="the parameter to balance the training objective (default: 1.0)")
-    parser.add_argument('--coefficient', type=float, default=0.001,
-                        help='L1 regularization coefficient')
-    parser.add_argument('--temp', type=float, default=0.05,
-                        help='temperature for loss function (default: 0.05)')
+    parser.add_argument('--temp', type=float, default=0.1,
+                        help='temperature for loss function (default: 0.1)')
     parser.add_argument('--eta', type=float, default=1e-5,
                         help='minimum value')
     args = parser.parse_args()
@@ -100,12 +100,6 @@ def parse_option():
     args.save_folder = os.path.join(args.model_path, args.model_name)
     if not os.path.isdir(args.save_folder):
         os.makedirs(args.save_folder)
-
-    try:
-        args.log_epochs = [int(i) for i in args.log_epochs.split(',')]
-    except ValueError:
-        print("invalid log_epochs value")
-        args.log_epochs = [0]
 
     args.log_path = os.path.join(args.data_folder, 'logs')
     if not os.path.isdir(args.log_path):
@@ -125,10 +119,10 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
         len(train_loader),
         [batch_time, data_time, learning, sc_loss, ce_loss, losses],
         prefix="Epoch: [{}]".format(epoch),
-        logfile=os.path.join(args.log_path, args.model_name + '_training.log'))
+        logfile=os.path.join(args.log_path, 'training_encoder_' + args.model_name + '.csv'))
 
     l1_criterion = nn.L1Loss(reduction='mean')
-    scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=3, eta_min=3e-06)
+    scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=5, T_mult=1.5, eta_min=args.eta)
 
     # switch to train mode
     model.train()
@@ -183,7 +177,7 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
         end = time.time()
 
         # log file
-        if epoch in args.log_epochs:
+        if args.log_epochs:
             progress.log_metrics(idx)
 
         # print info
@@ -200,7 +194,7 @@ def validate(validation_loader, model, criterion_sup, criterion_ce, epoch, args)
         len(validation_loader),
         [batch_time, data_time, losses],
         prefix="Epoch: [{}]".format(epoch),
-        logfile=os.path.join(args.log_path, args.model_name + '_validation.log')
+        logfile=os.path.join(args.log_path, 'validation_encoder_' + args.model_name + '.csv')
     )
 
     # switch to eval mode
@@ -237,7 +231,7 @@ def validate(validation_loader, model, criterion_sup, criterion_ce, epoch, args)
             batch_time.update(time.time() - end)
             end = time.time()
 
-            if epoch in args.log_epochs:
+            if args.log_epochs:
                 progress.log_metrics(idx)
 
             # print info
@@ -391,21 +385,32 @@ def main_worker(gpu, ngpus_per_node, args):
         semeval_datafolder = os.path.join(args.data_folder, 'preprocessed', args.dataset)
         train_filename = os.path.join(semeval_datafolder, 'dataset_two_combined_training.pkl')
         dev_filename = os.path.join(semeval_datafolder, 'dataset_two_combined_validation.pkl')
+        semeval_filename = os.path.join(semeval_datafolder, 'dataset_two_semeval_validation.pkl')
 
         training_data = pd.read_pickle(train_filename)
         training_data = training_data.reset_index(drop=True)
         dev_data = pd.read_pickle(dev_filename)
         dev_data = dev_data.reset_index(drop=True)
+        semeval_data = pd.read_pickle(semeval_filename)
+        semeval_data = semeval_data.reset_index(drop=True)
 
         train_dataset, _ = get_dataset_from_dataframe(training_data,
-                                                   tokenizer=tokenizer,
-                                                   args=args,
-                                                   max_length=args.max_seq_length)
+                                                      tokenizer=tokenizer,
+                                                      args=args,
+                                                      max_length=args.max_seq_length)
 
         validation_dataset, _ = get_dataset_from_dataframe(dev_data,
+                                                           tokenizer=tokenizer,
+                                                           args=args,
+                                                           max_length=args.max_seq_length)
+
+        semeval_dataset, _ = get_dataset_from_dataframe(semeval_data,
                                                         tokenizer=tokenizer,
                                                         args=args,
                                                         max_length=args.max_seq_length)
+
+        validation_dataset = ConcatDataset([validation_dataset, semeval_dataset])
+
     elif args.dataset == 'DATASET_ONE':
 
         semeval_datafolder = os.path.join(args.data_folder, 'preprocessed', args.dataset)

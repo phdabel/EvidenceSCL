@@ -51,7 +51,9 @@ def parse_option():
     parser.add_argument('--batch_size', type=int, default=8, help='batch_size')
     parser.add_argument('--learning_rate', type=float, default=0.001,
                         help='learning rate')
-    parser.add_argument('--weight_decay', type=float, default=1e-6,
+    parser.add_argument('--coefficient', type=float, default=0.1,
+                        help='L1 regularization coefficient.')  # L1 regularization
+    parser.add_argument('--weight_decay', type=float, default=0.4,
                         help='weight decay')  # weight decay corresponds to the L2 regularization factor
     parser.add_argument('--gradient_accumulation_steps', type=int, default=64,
                         help='number of updates steps to accumulate before performing a backward/update pass.')
@@ -59,8 +61,8 @@ def parse_option():
                         help='momentum')
     parser.add_argument('--print_freq', type=int, default=100,
                         help='print frequency')
-    parser.add_argument('--log_epochs', type=str, default='0',
-                        help='which epochs to log, can be a list')
+    parser.add_argument('--log_epochs', action='store_true',
+                        help='Create a CSV file to log the metrics.')
 
     # distribute
     parser.add_argument('--world-size', default=-1, type=int,
@@ -81,8 +83,7 @@ def parse_option():
                              'node or multi node data parallel training')
     # parameters
     parser.add_argument('--shuffle', action='store_true', help='shuffle dataloader')
-    parser.add_argument('--coefficient', type=float, default=0.01, help='L1 regularization coefficient.')
-    parser.add_argument('--temp', type=float, default=0.05, help='temperature for loss function')
+    parser.add_argument('--temp', type=float, default=0.1, help='temperature for loss function')
     parser.add_argument('--ckpt', type=str, default='', help="path to pre-trained model")
     args = parser.parse_args()
 
@@ -95,12 +96,6 @@ def parse_option():
     args.save_folder = os.path.join(args.model_path, args.model_name)
     if not os.path.isdir(args.save_folder):
         os.makedirs(args.save_folder)
-
-    try:
-        args.log_epochs = [int(i) for i in args.log_epochs.split(',')]
-    except ValueError:
-        print("invalid log_epochs value")
-        args.log_epochs = [0]
 
     args.log_path = os.path.join(args.data_folder, 'logs')
     if not os.path.isdir(args.log_path):
@@ -286,19 +281,19 @@ def main_worker(gpu, ngpus_per_node, args):
         semeval_data = semeval_data.reset_index(drop=True)
 
         train_dataset, _ = get_dataset_from_dataframe(training_data,
-                                                   tokenizer=tokenizer,
-                                                   args=args,
-                                                   max_length=args.max_seq_length)
+                                                      tokenizer=tokenizer,
+                                                      args=args,
+                                                      max_length=args.max_seq_length)
 
         validation_dataset, _ = get_dataset_from_dataframe(dev_data,
-                                                        tokenizer=tokenizer,
-                                                        args=args,
-                                                        max_length=args.max_seq_length)
+                                                           tokenizer=tokenizer,
+                                                           args=args,
+                                                           max_length=args.max_seq_length)
 
         semeval_dataset, all_ids = get_dataset_from_dataframe(semeval_data,
-                                                     tokenizer=tokenizer,
-                                                     args=args,
-                                                     max_length=args.max_seq_length)
+                                                              tokenizer=tokenizer,
+                                                              args=args,
+                                                              max_length=args.max_seq_length)
 
     elif args.dataset == 'DATASET_ONE':
 
@@ -413,7 +408,7 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
         len(train_loader),
         [batch_time, data_time, learning, losses, top],
         prefix="Epoch: [{}]".format(epoch),
-        logfile=os.path.join(args.log_path, args.model_name + '_training.log'))
+        logfile=os.path.join(args.log_path, 'training_' + args.model_name + '.csv'))
 
     l1_criterion = nn.L1Loss(reduction='mean')
     scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=5, eta_min=1e-06)
@@ -469,7 +464,7 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
         batch_time.update(time.time() - end)
         end = time.time()
 
-        if epoch in args.log_epochs:
+        if args.log_epochs:
             progress.log_metrics(idx)
 
         # print info
@@ -486,7 +481,7 @@ def validate(val_loader, semeval_dataset, semeval_ids, model, classifier, criter
         len(val_loader),
         [batch_time, losses, top],
         prefix="Epoch: [{}]".format(epoch),
-        logfile=os.path.join(args.log_path, args.model_name + '_validation.log'))
+        logfile=os.path.join(args.log_path, 'validation_' + args.model_name + '.csv'))
 
     semeval_batch_time = AverageMeter('Time', ':6.3f')
     semeval_losses = AverageMeter('Loss', ':.3f')
@@ -494,7 +489,7 @@ def validate(val_loader, semeval_dataset, semeval_ids, model, classifier, criter
         len(semeval_ids),
         [semeval_batch_time, semeval_losses],
         prefix="Epoch: [{}]".format(epoch),
-        logfile=os.path.join(args.log_path, args.model_name + '_semeval_validation.log'))
+        logfile=os.path.join(args.log_path, 'semeval_validation_' + args.model_name + '_.csv'))
 
     # switch to validate mode
     model.eval()
@@ -536,7 +531,7 @@ def validate(val_loader, semeval_dataset, semeval_ids, model, classifier, criter
             semeval_batch_time.update(time.time() - end)
             end = time.time()
 
-            if epoch in args.log_epochs:
+            if args.log_epochs:
                 semeval_progress.log_metrics(i)
 
             # print info
@@ -583,7 +578,7 @@ def validate(val_loader, semeval_dataset, semeval_ids, model, classifier, criter
             batch_time.update(time.time() - end)
             end = time.time()
 
-            if epoch in args.log_epochs:
+            if args.log_epochs:
                 progress.log_metrics(idx)
 
             # print info
