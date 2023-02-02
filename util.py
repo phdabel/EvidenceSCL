@@ -100,14 +100,13 @@ class ProgressMeter(object):
             metric, value = meter.__csv__()
             entries[metric] = float(value)
 
-        with open(self.logfile, 'a') as filename:
-            if not self.header and epoch == 0:
-                self.header = sep.join([key for key in entries.keys()]) + '\n'
-                filename.write(self.header)
-            content = sep.join([str(entries[key]) for key in entries.keys()]) + '\n'
-            filename.write(content)
-        filename.close()
-        return entries
+        _logfile = open(self.logfile, 'a')
+        if not self.header and epoch == 0:
+            self.header = sep.join([key for key in entries.keys()]) + '\n'
+            _logfile.write(self.header)
+        content = sep.join([str(entries[key]) for key in entries.keys()]) + '\n'
+        _logfile.write(content)
+        _logfile.close()
 
     def _get_batch_fmtstr(self, num_batches):
         num_digits = len(str(num_batches // 1))
