@@ -406,9 +406,9 @@ def main_worker(gpu, ngpus_per_node, args):
 def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
-    losses = AverageMeter('Loss', ':.3f')
-    learning = AverageMeter('Learning Rate', ':.5f')
-    top = AverageMeter('Accuracy', ':.2f')
+    losses = AverageMeter('Loss', ':1.5f')
+    learning = AverageMeter('Learning Rate', ':1.7f')
+    top = AverageMeter('Accuracy', ':1.2f')
     progress = ProgressMeter(
         len(train_loader),
         [batch_time, data_time, learning, losses, top],
@@ -480,8 +480,8 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
 
 def validate(val_loader, semeval_dataset, semeval_ids, model, classifier, criterion, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
-    losses = AverageMeter('Loss', ':.3f')
-    top = AverageMeter('Accuracy', ':.2f')
+    losses = AverageMeter('Loss', ':1.5f')
+    top = AverageMeter('Accuracy', ':1.2f')
     progress = ProgressMeter(
         len(val_loader),
         [batch_time, losses, top],
@@ -489,7 +489,7 @@ def validate(val_loader, semeval_dataset, semeval_ids, model, classifier, criter
         logfile=os.path.join(args.log_path, 'validation_' + args.model_name + '.csv'))
 
     semeval_batch_time = AverageMeter('Time', ':6.3f')
-    semeval_losses = AverageMeter('Loss', ':.3f')
+    semeval_losses = AverageMeter('Loss', ':1.5f')
     semeval_progress = ProgressMeter(
         len(semeval_ids),
         [semeval_batch_time, semeval_losses],

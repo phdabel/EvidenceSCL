@@ -111,10 +111,10 @@ def parse_option():
 def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
-    learning = AverageMeter('Learning Rate', ':1.5f')
-    sc_loss = AverageMeter('SC Loss', ':2.5f')
-    ce_loss = AverageMeter('CE Loss', ':2.5f')
-    losses = AverageMeter('Overall Loss', ':6.7f')
+    learning = AverageMeter('Learning Rate', ':1.7f')
+    sc_loss = AverageMeter('SC Loss', ':1.5f')
+    ce_loss = AverageMeter('CE Loss', ':1.5f')
+    losses = AverageMeter('Overall Loss', ':1.5f')
     progress = ProgressMeter(
         len(train_loader),
         [batch_time, data_time, learning, sc_loss, ce_loss, losses],
@@ -187,9 +187,9 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
 
 
 def validate(validation_loader, model, criterion_sup, criterion_ce, epoch, args):
-    batch_time = AverageMeter('Time', ':6.3f')
-    data_time = AverageMeter('Data', ':6.3f')
-    losses = AverageMeter('Loss', ':6.7f')
+    batch_time = AverageMeter('Time', ':1.3f')
+    data_time = AverageMeter('Data', ':1.3f')
+    losses = AverageMeter('Loss', ':1.5f')
     progress = ProgressMeter(
         len(validation_loader),
         [batch_time, data_time, losses],
