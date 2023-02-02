@@ -82,13 +82,18 @@ def parse_option():
                              'which has N GPUs. This is the fastest way to use PyTorch for either single '
                              'node or multi node data parallel training')
     # parameters
-    parser.add_argument('--shuffle', action='store_true', help='shuffle dataloader')
-    parser.add_argument('--temp', type=float, default=0.1, help='temperature for loss function')
-    parser.add_argument('--ckpt', type=str, default='', help="path to pre-trained model")
+    parser.add_argument('--shuffle', action='store_true',
+                        help='shuffle dataloader')
+    parser.add_argument('--temp', type=float, default=0.1,
+                        help='temperature for loss function')
+    parser.add_argument('--ckpt', type=str, default='',
+                        help="path to pre-trained model")
+    parser.add_argument('--eta', type=float, default=1e-5,
+                        help='minimum value')
+
     args = parser.parse_args()
 
     args.model_path = './save/{}_models'.format(args.dataset)
-
     args.model_name = '{}_{}_lr_{}_decay_{}_bsz_{}_grad_{}_temp_{}_l1_coefficient_{}'.\
         format(args.dataset, args.model, args.learning_rate, args.weight_decay, args.batch_size,
                args.gradient_accumulation_steps, args.temp, args.coefficient)
@@ -411,7 +416,7 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
         logfile=os.path.join(args.log_path, 'training_' + args.model_name + '.csv'))
 
     l1_criterion = nn.L1Loss(reduction='mean')
-    scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=5, eta_min=1e-06)
+    scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=5, eta_min=args.eta)
 
     # switch to train mode
     model.eval()

@@ -122,7 +122,7 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
         logfile=os.path.join(args.log_path, 'training_encoder_' + args.model_name + '.csv'))
 
     l1_criterion = nn.L1Loss(reduction='mean')
-    scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=5, T_mult=1.5, eta_min=args.eta)
+    scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=5, eta_min=args.eta)
 
     # switch to train mode
     model.train()
