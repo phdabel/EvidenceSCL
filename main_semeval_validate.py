@@ -489,7 +489,7 @@ def validate(val_loader, semeval_dataset, semeval_ids, model, classifier, criter
         len(semeval_ids),
         [semeval_batch_time, semeval_losses],
         prefix="Epoch: [{}]".format(epoch),
-        logfile=os.path.join(args.log_path, 'semeval_validation_' + args.model_name + '_.csv'))
+        logfile=os.path.join(args.log_path, 'semeval_validation_' + args.model_name + '.csv'))
 
     # switch to validate mode
     model.eval()
