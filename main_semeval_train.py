@@ -493,17 +493,26 @@ def main_worker(gpu, ngpus_per_node, args):
         val_time1 = time.time()
         validation_loss = validate(validation_loader, model, criterion_supcon, criterion_ce, epoch, args)
         val_time2 = time.time()
-        print('Validation epoch {}, total time {:.2f}, loss {:.7f}'.format(epoch, (val_time2 - val_time1), validation_loss))
+        print('Validation epoch {}, total time {:.2f}, loss {:.7f}'.format(epoch,
+                                                                           (val_time2 - val_time1),
+                                                                           validation_loss))
 
         stopper(loss, validation_loss)
         if stopper.early_stop:
             print("Early stop")
             break
+
+        if not args.multiprocessing_distributed or (args.multiprocessing_distributed and
+                                                    args.rank % ngpus_per_node == 0):
+            save_file = os.path.join(args.save_folder, 'current.pt')
+            if epoch % 5 == 0:
+                save_file = os.path.join(args.save_folder, '_epoch_%d.pt' % epoch)
+            save_model(model, optimizer, args, args.epochs, save_file, False)
         
     # save the last model
     if not args.multiprocessing_distributed or (args.multiprocessing_distributed and args.rank % ngpus_per_node == 0):
         save_file = os.path.join(args.save_folder, 'last.pth')
-        save_model(model, optimizer, args, args.epochs, save_file, False)  
+        save_model(model, optimizer, args, args.epochs, save_file, False)
  
 
 if __name__ == '__main__':
