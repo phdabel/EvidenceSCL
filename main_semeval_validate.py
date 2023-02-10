@@ -142,7 +142,7 @@ def main():
 
 
 def main_worker(gpu, ngpus_per_node, args):
-    best_acc1 = 0
+    best_acc1 = None
     args.gpu = gpu
 
     if args.gpu is not None:
@@ -392,7 +392,7 @@ def main_worker(gpu, ngpus_per_node, args):
         validation_loss, acc = validate(validate_loader, semeval_dataset, all_ids, model, classifier, criterion, epoch, args)
         if acc > best_acc1:
             best_acc1 = acc
-            print('best accuracy: {:.2f}'.format(best_acc1))
+            print('best accuracy: {:.3f}'.format(best_acc1.item()))
             save_file = os.path.join(args.save_folder, 'classifier_last.pth')
             save_model(classifier, optimizer, args, epoch, save_file, True)
 
@@ -400,7 +400,7 @@ def main_worker(gpu, ngpus_per_node, args):
                                                 and args.rank % ngpus_per_node == 0):
         save_file = os.path.join(args.save_folder, 'classifier_last.pth')
         save_model(classifier, optimizer, args, epoch, save_file, False)
-    print("best accuracy: {:.2f}".format(best_acc1))
+    print("best accuracy: {:.3f}".format(best_acc1.item()))
 
 
 def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
