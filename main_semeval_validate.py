@@ -452,7 +452,7 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
         loss = criterion(logits.view(-1, 2), labels.view(-1))
 
         # L1 regularization
-        for param in model.encoder.parameters():
+        for param in model.module.encoder.parameters():
             loss += args.coefficient * l1_criterion(param, torch.zeros_like(param))
 
         if args.gradient_accumulation_steps > 1:
