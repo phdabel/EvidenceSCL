@@ -21,7 +21,7 @@ from sklearn.metrics import accuracy_score
 
 from preprocessing.semeval_dataset import get_balanced_dataset_three_labels, get_balanced_dataset_two_labels, \
     get_dataset_from_dataframe
-from util import accuracy, save_model, AverageMeter, ProgressMeter, get_lr
+from util import accuracy, save_model, AverageMeter, ProgressMeter, get_lr, EarlyStopping
 from torch.utils.data import DataLoader
 from bert_model import BertForCL, LinearClassifier, PairSupConBert
 
@@ -46,8 +46,6 @@ def parse_option():
                         help='manual epoch number (useful on restarts)')
     parser.add_argument('--resume', default='', type=str, metavar='PATH',
                         help='path to latest checkpoint (default: none)')
-    parser.add_argument('--pretrained', dest='pretrained', action='store_true',
-                        help='use pre-trained model')
     parser.add_argument('--batch_size', type=int, default=8, help='batch_size')
     parser.add_argument('--learning_rate', type=float, default=0.001,
                         help='learning rate')
@@ -84,8 +82,6 @@ def parse_option():
     # parameters
     parser.add_argument('--shuffle', action='store_true',
                         help='shuffle dataloader')
-    parser.add_argument('--temp', type=float, default=0.1,
-                        help='temperature for loss function')
     parser.add_argument('--ckpt', type=str, default='',
                         help="path to pre-trained model")
     parser.add_argument('--eta', type=float, default=1e-5,
@@ -94,9 +90,9 @@ def parse_option():
     args = parser.parse_args()
 
     args.model_path = './save/{}_models'.format(args.dataset)
-    args.model_name = '{}_{}_lr_{}_decay_{}_bsz_{}_grad_{}_temp_{}_l1_coefficient_{}'.\
+    args.model_name = '{}_{}_lr_{}_decay_{}_bsz_{}_grad_{}_l1_coefficient_{}'.\
         format(args.dataset, args.model, args.learning_rate, args.weight_decay, args.batch_size,
-               args.gradient_accumulation_steps, args.temp, args.coefficient)
+               args.gradient_accumulation_steps, args.coefficient)
 
     args.save_folder = os.path.join(args.model_path, args.model_name)
     if not os.path.isdir(args.save_folder):
@@ -285,16 +281,20 @@ def main_worker(gpu, ngpus_per_node, args):
         semeval_data = pd.read_pickle(semeval_filename)
         semeval_data = semeval_data.reset_index(drop=True)
 
-        train_dataset, _ = get_dataset_from_dataframe(training_data,
+        # we keep only semeval data when training the classifier
+        train_dataset, training_ids = get_dataset_from_dataframe(training_data,
                                                       tokenizer=tokenizer,
                                                       args=args,
-                                                      max_length=args.max_seq_length)
+                                                      max_length=args.max_seq_length,
+                                                      semeval_only=True)
 
+        # validation with mednli and multinli
         validation_dataset, _ = get_dataset_from_dataframe(dev_data,
                                                            tokenizer=tokenizer,
                                                            args=args,
                                                            max_length=args.max_seq_length)
 
+        # validation with semeval data only (not shuffled)
         semeval_dataset, all_ids = get_dataset_from_dataframe(semeval_data,
                                                               tokenizer=tokenizer,
                                                               args=args,
@@ -373,6 +373,8 @@ def main_worker(gpu, ngpus_per_node, args):
         validate_loader = DataLoader(validation_dataset, batch_size=args.batch_size, shuffle=shuffle,
                                      num_workers=args.workers, pin_memory=True, sampler=validation_sampler)
 
+    stopper = EarlyStopping(min_delta=1e-5)
+
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             train_sampler.set_epoch(epoch)
@@ -381,16 +383,22 @@ def main_worker(gpu, ngpus_per_node, args):
         time1 = time.time()
         loss, train_acc = train(train_loader, model, classifier, criterion, optimizer, epoch, args)
         time2 = time.time()
-        print('epoch {}, total time {:.2f}, loss {:.2f}, accuracy {:.2f}'
+        print('epoch {}, total time {:.2f}, loss {:.7f}, accuracy {:.2f}'
               .format(epoch, time2 - time1, loss, train_acc))
 
-        if not args.multiprocessing_distributed or (args.multiprocessing_distributed
-                                                    and args.rank % ngpus_per_node == 0):
-            save_file = os.path.join(args.save_folder, 'classifier_epoch_%d.pth' % epoch)
-            save_model(classifier, optimizer, args, epoch, save_file, False)
+        v_time1 = time.time()
+        validation_loss, semeval_loss, acc = validate(validate_loader, semeval_dataset, all_ids, model, classifier,
+                                                      criterion, epoch, args)
+        v_time2 = time.time()
+        print('epoch {}, total time {:.2f}, validation loss {:.7f}, semeval loss {:.7f}, validation accuracy {:.2f}'
+              .format(epoch, v_time2 - v_time1, validation_loss, semeval_loss, acc))
 
-        validation_loss, acc = validate(validate_loader, semeval_dataset, all_ids, model, classifier, criterion, epoch, args)
-        if acc > best_acc1:
+        stopper(loss, semeval_loss)
+        if stopper.early_stop:
+            print("Early stop")
+            break
+
+        if best_acc1 is None or acc > best_acc1:
             best_acc1 = acc
             print('best accuracy: {:.3f}'.format(best_acc1.item()))
             save_file = os.path.join(args.save_folder, 'classifier_last.pth')
@@ -444,7 +452,7 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
         loss = criterion(logits.view(-1, 2), labels.view(-1))
 
         # L1 regularization
-        for param in model.parameters():
+        for param in model.encoder.parameters():
             loss += args.coefficient * l1_criterion(param, torch.zeros_like(param))
 
         if args.gradient_accumulation_steps > 1:
@@ -590,7 +598,7 @@ def validate(val_loader, semeval_dataset, semeval_ids, model, classifier, criter
             if (idx + 1) % args.print_freq == 0:
                 progress.display(idx)
 
-    return np.mean([losses.avg, semeval_losses.avg]), acc
+    return losses.avg, semeval_losses.avg, acc
 
 
 if __name__ == '__main__':

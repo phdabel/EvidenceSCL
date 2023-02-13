@@ -44,11 +44,14 @@ def get_evidences(rct_filepath, section_id):
     return evidences[section_id]
 
 
-def get_dataset_from_dataframe(data, tokenizer, args, classdict=None, max_length=128, train=True):
+def get_dataset_from_dataframe(data, tokenizer, args, classdict=None, max_length=128, semeval_only=False):
     # default is binary problem
 
     if classdict is None:
         classdict = {'contradiction': 0, 'entailment': 1}
+
+    if semeval_only:
+        data = data[data.valid_section == True]
 
     inputs = tokenizer.batch_encode_plus(
         [(sample.premises, sample.hypotheses) for i, sample in data.iterrows()],
