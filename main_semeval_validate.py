@@ -391,7 +391,7 @@ def main_worker(gpu, ngpus_per_node, args):
                                                       criterion, epoch, args)
         v_time2 = time.time()
         print('epoch {}, total time {:.2f}, validation loss {:.7f}, semeval loss {:.7f}, validation accuracy {:.2f}'
-              .format(epoch, v_time2 - v_time1, validation_loss, semeval_loss, acc))
+              .format(epoch, v_time2 - v_time1, validation_loss, semeval_loss, acc.item()))
 
         stopper(loss, semeval_loss)
         if stopper.early_stop:
