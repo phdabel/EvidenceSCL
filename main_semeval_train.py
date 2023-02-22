@@ -82,6 +82,10 @@ def parse_option():
                              'which has N GPUs. This is the fastest way to use PyTorch for either single '
                              'node or multi node data parallel training')
     # parameters
+    parser.add_argument('--pairscl', action='store_true',
+                        help='train SCL and cross entropy for NLI objective.')
+    parser.add_argument('--num_classes', type=int, default=2,
+                        help='number of entailment classes')
     parser.add_argument('--shuffle', action='store_true',
                         help='shuffle dataloader')
     parser.add_argument('--alpha', type=float, default=1.0,
@@ -146,7 +150,8 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
                   "token_type_ids": batch[2]}
         feature1, feature2 = model(**inputs)
 
-        loss_sup = criterion_sup(feature2, batch[4])
+        scl_label = batch[4] if not args.pairscl else batch[3]
+        loss_sup = criterion_sup(feature2, scl_label)
         loss_ce = criterion_ce(feature1, batch[3])
         loss = loss_sup + loss_ce * args.alpha
 
@@ -215,7 +220,8 @@ def validate(validation_loader, model, criterion_sup, criterion_ce, epoch, args)
                       "token_type_ids": batch[2]}
             feature1, feature2 = model(**inputs)
 
-            loss_sup = criterion_sup(feature2, batch[4])
+            scl_label = batch[4] if not args.pairscl else batch[3]
+            loss_sup = criterion_sup(feature2, scl_label)
             loss_ce = criterion_ce(feature1, batch[3])
             loss = loss_sup + args.alpha * loss_ce
 
@@ -296,7 +302,7 @@ def main_worker(gpu, ngpus_per_node, args):
         # You can increase this for multi-class tasks.
         output_attentions=False,  # Whether the model returns attentions weights.
         output_hidden_states=False,  # Whether the model returns all hidden-states.
-    ), num_classes=3)  # number of classes (0 - contradiction, 1 - entailment)
+    ), num_classes=args.num_classes)  # number of classes (0 - contradiction, 1 - entailment) or (0 - entailment, 1 - neutral, 2 - contradiction)
 
     tokenizer = AutoTokenizer.from_pretrained("allenai/biomed_roberta_base")
 

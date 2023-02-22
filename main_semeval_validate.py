@@ -161,17 +161,17 @@ def main_worker(gpu, ngpus_per_node, args):
         # You can increase this for multi-class tasks.
         output_attentions=False,  # Whether the model returns attentions weights.
         output_hidden_states=False,  # Whether the model returns all hidden-states.
-    ), is_train=False, num_classes=3)
+    ), is_train=False, num_classes=2)
 
     tokenizer = AutoTokenizer.from_pretrained("allenai/biomed_roberta_base")
 
     classifier = LinearClassifier(BertForCL.from_pretrained(
         "allenai/biomed_roberta_base",  # Use the 12-layer Biomed Roberta model from allenai, with a cased vocab.
-        num_labels=3,  # The number of output labels--2 for binary classification.
+        num_labels=2,  # The number of output labels--2 for binary classification.
         # You can increase this for multi-class tasks.
         output_attentions=False,  # Whether the model returns attentions weights.
         output_hidden_states=False,  # Whether the model returns all hidden-states.
-    ), num_classes=3)
+    ), num_classes=2)
 
     state_dict = None
     if args.ckpt != '':
@@ -301,73 +301,6 @@ def main_worker(gpu, ngpus_per_node, args):
                                                               args=args,
                                                               max_length=args.max_seq_length)
 
-    elif args.dataset == 'DATASET_ONE':
-
-        semeval_datafolder = os.path.join(args.data_folder, 'preprocessed', args.dataset)
-        train_filename = os.path.join(semeval_datafolder, 'dataset_1_mnli_mednli_semeval.pkl')
-        dev_filename = os.path.join(semeval_datafolder, 'dataset_1_dev_semeval23.pkl')
-
-        training_data = pd.read_pickle(train_filename)
-        training_data = training_data.reset_index(drop=True)
-        dev_data = pd.read_pickle(dev_filename)
-        dev_data = dev_data.reset_index(drop=True)
-
-        train_dataset, _ = get_dataset_from_dataframe(training_data,
-                                                   tokenizer=tokenizer,
-                                                   args=args,
-                                                   max_length=args.max_seq_length)
-
-        validation_dataset, _ = get_dataset_from_dataframe(dev_data,
-                                                        tokenizer=tokenizer,
-                                                        args=args,
-                                                        max_length=args.max_seq_length)
-
-    elif args.dataset == 'SEMEVAL23_RAW':
-        train_filename = os.path.join(args.data_folder, 'training_data', "train.json")
-        dev_filename = os.path.join(args.data_folder, 'training_data', "dev.json")
-
-        train_file = open(train_filename, 'r')
-        train_data = json.load(train_file)
-        train_file.close()
-        dev_file = open(dev_filename, 'r')
-        dev_data = json.load(dev_file)
-        dev_file.close()
-
-        train_dataset, _, _ = get_balanced_dataset_two_labels(train_data,
-                                                        tokenizer=tokenizer,
-                                                        max_length=args.max_seq_length)
-        validation_dataset, _, _ = get_balanced_dataset_two_labels(dev_data,
-                                                             tokenizer=tokenizer,
-                                                             max_length=args.max_seq_length)
-    elif args.dataset == 'SEMEVAL23':
-        semeval_datafolder = os.path.join(args.data_folder, 'preprocessed', 'SEMEVAL23')
-        train_filename = os.path.join(semeval_datafolder, 'balanced_training_dataset.pkl')
-        dev_filename = os.path.join(semeval_datafolder, 'balanced_dev_dataset.pkl')
-        semeval_filename = os.path.join(semeval_datafolder, 'dataset_two_semeval_validation.pkl')
-
-        training_data = pd.read_pickle(train_filename)
-        training_data = training_data.reset_index(drop=True)
-
-        dev_data = pd.read_pickle(dev_filename)
-        dev_data = dev_data.reset_index(drop=True)
-
-        semeval_data = pd.read_pickle(semeval_filename)
-        semeval_data = semeval_data.reset_index(drop=True)
-
-        train_dataset = get_balanced_dataset_three_labels(training_data,
-                                                          tokenizer=tokenizer,
-                                                          max_length=args.max_seq_length)
-
-        validation_dataset = get_balanced_dataset_three_labels(dev_data,
-                                                               tokenizer=tokenizer,
-                                                               max_length=args.max_seq_length)
-
-        # validation with semeval data only (not shuffled)
-        semeval_dataset, all_ids = get_dataset_from_dataframe(semeval_data,
-                                                              tokenizer=tokenizer,
-                                                              args=args,
-                                                              max_length=args.max_seq_length)
-
     else:
         raise ValueError('dataset not supported: {}'.format(args.dataset))
 
@@ -381,8 +314,6 @@ def main_worker(gpu, ngpus_per_node, args):
         shuffle = True if args.shuffle else False
         train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=shuffle,
                                   num_workers=args.workers, pin_memory=True, sampler=train_sampler)
-        validate_loader = DataLoader(validation_dataset, batch_size=args.batch_size, shuffle=shuffle,
-                                     num_workers=args.workers, pin_memory=True, sampler=validation_sampler)
 
     stopper = EarlyStopping(min_delta=1e-3)
 
@@ -398,8 +329,8 @@ def main_worker(gpu, ngpus_per_node, args):
               .format(epoch, time2 - time1, loss, train_acc))
 
         v_time1 = time.time()
-        validation_loss, semeval_loss, acc = validate(validate_loader, semeval_dataset, all_ids, model, classifier,
-                                                      criterion, epoch, args)
+        validation_loss, semeval_loss, acc = validate(semeval_dataset, all_ids, model, classifier, criterion,
+                                                      epoch, args)
         v_time2 = time.time()
         print('epoch {}, total time {:.2f}, validation loss {:.7f}, semeval loss {:.7f}, validation accuracy {:.2f}'
               .format(epoch, v_time2 - v_time1, validation_loss, semeval_loss, acc.item()))
@@ -459,8 +390,8 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
             features = model(**inputs)
 
         logits = classifier(features.detach())
-        labels = batch[3]
-        loss = criterion(logits.view(-1, 3), labels.view(-1))
+        labels = batch[4]
+        loss = criterion(logits.view(-1, 2), labels.view(-1))
 
         # L1 regularization
         for param in model.module.encoder.parameters():
@@ -497,16 +428,7 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
     return losses.avg, top.avg
 
 
-def validate(val_loader, semeval_dataset, semeval_ids, model, classifier, criterion, epoch, args):
-    batch_time = AverageMeter('Time', ':6.3f')
-    losses = AverageMeter('Loss', ':1.5f')
-    top = AverageMeter('Accuracy', ':1.2f')
-    progress = ProgressMeter(
-        len(val_loader),
-        [batch_time, losses, top],
-        prefix="Epoch: [{}]".format(epoch),
-        logfile=os.path.join(args.log_path, 'validation_' + args.model_name + '.csv'))
-
+def validate(semeval_dataset, semeval_ids, model, classifier, criterion, epoch, args):
     semeval_batch_time = AverageMeter('Time', ':6.3f')
     semeval_losses = AverageMeter('Loss', ':1.5f')
     semeval_progress = ProgressMeter(
@@ -538,7 +460,7 @@ def validate(val_loader, semeval_dataset, semeval_ids, model, classifier, criter
             features = model(**inputs)
             logits = classifier(features.detach())
 
-            loss = criterion(logits.view(-1, 3), batch[3].view(-1))
+            loss = criterion(logits.view(-1, 2), batch[4].view(-1))
 
             # normalizes loss to account for batch accumulation
             if args.gradient_accumulation_steps > 1:
@@ -549,7 +471,7 @@ def validate(val_loader, semeval_dataset, semeval_ids, model, classifier, criter
             _, _pred = logits.topk(1, 1, True, True)
             res["predicted"].append(_pred.item())
             res["iid"].append(_id)
-            res["gold_label"].append(batch[3].item())
+            res["gold_label"].append(batch[4].item())
 
             # measure elapsed time
             semeval_batch_time.update(time.time() - end)
@@ -563,54 +485,11 @@ def validate(val_loader, semeval_dataset, semeval_ids, model, classifier, criter
                 semeval_progress.display(i)
 
         results_df = pd.DataFrame(res)
-        results_df = results_df.drop([i for i, _ in results_df[(results_df.predicted == 1)].iterrows()]).groupby('iid').aggregate(list).reset_index()
-        results_df['maj_preds'] = [mode(row.predicted) for i, row in results_df.iterrows()]
-        results_df['gold_label'] = [mode(row.gold_label) for i, row in results_df.iterrows()]
-
-        acc = accuracy_score(results_df['gold_label'], results_df['maj_preds'], normalize=True, labels=[0, 2],
-                             pos_label=0)
+        acc = accuracy_score(results_df.gold_label, results_df.predicted, normalize=True)
         print(f'Sem Eval Validation Accuracy: {acc:.3f}')
-        acc = torch.tensor([float(acc*100)]).cuda()
+        acc = torch.tensor([float(acc * 100)]).cuda()
 
-        for idx, batch in enumerate(val_loader):
-            bsz = batch[0].size(0)
-
-            if args.gpu is not None:
-                for i in range(1, len(batch)):
-                    batch[i] = batch[i].cuda(args.gpu, non_blocking=True)
-
-            # compute loss
-            batch = tuple(t.cuda() for t in batch)
-            inputs = {"input_ids": batch[0],
-                      "attention_mask": batch[1],
-                      "token_type_ids": batch[2]}
-            labels = batch[3]
-            features = model(**inputs)
-            logits = classifier(features.detach())
-            loss = criterion(logits.view(-1, 3), labels.view(-1))
-
-            # normalizes loss to account for batch accumulation
-            if args.gradient_accumulation_steps > 1:
-                loss = loss / args.gradient_accumulation_steps
-
-            # update metric
-            # print(logits)
-            losses.update(loss.item(), bsz)
-            acc1 = accuracy(logits, labels)
-            top.update(acc1[0].item(), bsz)
-
-            # measure elapsed time
-            batch_time.update(time.time() - end)
-            end = time.time()
-
-            if args.log_epochs:
-                progress.log_metrics(idx)
-
-            # print info
-            if (idx + 1) % args.print_freq == 0:
-                progress.display(idx)
-
-    return losses.avg, semeval_losses.avg, acc
+    return semeval_losses.avg, acc
 
 
 if __name__ == '__main__':
