@@ -6,6 +6,7 @@ import random
 import pandas as pd
 import warnings
 import numpy as np
+from statistics import mode
 from transformers import AutoTokenizer
 import torch
 import torch.nn as nn
@@ -562,11 +563,12 @@ def validate(val_loader, semeval_dataset, semeval_ids, model, classifier, criter
                 semeval_progress.display(i)
 
         results_df = pd.DataFrame(res)
-        results_df = results_df.groupby('iid').aggregate(list).reset_index()
-        results_df['_predicted'] = [1 if np.sum(row.predicted) > 0 else 0 for i, row in results_df.iterrows()]
-        results_df['_gold_label'] = [1 if np.sum(row.gold_label) > 0 else 0 for i, row in results_df.iterrows()]
+        results_df = results_df.drop([i for i, _ in results_df[(results_df.predicted == 1)].iterrows()]).groupby('iid').aggregate(list).reset_index()
+        results_df['maj_preds'] = [mode(row.predicted) for i, row in results_df.iterrows()]
+        results_df['gold_label'] = [mode(row.gold_label) for i, row in results_df.iterrows()]
 
-        acc = accuracy_score(results_df['_gold_label'], results_df['_predicted'], normalize=True)
+        acc = accuracy_score(results_df['gold_label'], results_df['maj_preds'], normalize=True, labels=[0, 2],
+                             pos_label=0)
         print(f'Sem Eval Validation Accuracy: {acc:.3f}')
         acc = torch.tensor([float(acc*100)]).cuda()
 
