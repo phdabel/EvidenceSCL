@@ -160,17 +160,17 @@ def main_worker(gpu, ngpus_per_node, args):
         # You can increase this for multi-class tasks.
         output_attentions=False,  # Whether the model returns attentions weights.
         output_hidden_states=False,  # Whether the model returns all hidden-states.
-    ), is_train=False)
+    ), is_train=False, num_classes=3)
 
     tokenizer = AutoTokenizer.from_pretrained("allenai/biomed_roberta_base")
 
     classifier = LinearClassifier(BertForCL.from_pretrained(
         "allenai/biomed_roberta_base",  # Use the 12-layer Biomed Roberta model from allenai, with a cased vocab.
-        num_labels=2,  # The number of output labels--2 for binary classification.
+        num_labels=3,  # The number of output labels--2 for binary classification.
         # You can increase this for multi-class tasks.
         output_attentions=False,  # Whether the model returns attentions weights.
         output_hidden_states=False,  # Whether the model returns all hidden-states.
-    ), num_classes=2)
+    ), num_classes=3)
 
     state_dict = None
     if args.ckpt != '':
@@ -342,6 +342,7 @@ def main_worker(gpu, ngpus_per_node, args):
         semeval_datafolder = os.path.join(args.data_folder, 'preprocessed', 'SEMEVAL23')
         train_filename = os.path.join(semeval_datafolder, 'balanced_training_dataset.pkl')
         dev_filename = os.path.join(semeval_datafolder, 'balanced_dev_dataset.pkl')
+        semeval_filename = os.path.join(semeval_datafolder, 'dataset_two_semeval_validation.pkl')
 
         training_data = pd.read_pickle(train_filename)
         training_data = training_data.reset_index(drop=True)
@@ -349,13 +350,22 @@ def main_worker(gpu, ngpus_per_node, args):
         dev_data = pd.read_pickle(dev_filename)
         dev_data = dev_data.reset_index(drop=True)
 
+        semeval_data = pd.read_pickle(semeval_filename)
+        semeval_data = semeval_data.reset_index(drop=True)
+
         train_dataset = get_balanced_dataset_three_labels(training_data,
-                                             tokenizer=tokenizer,
-                                             max_length=args.max_seq_length)
+                                                          tokenizer=tokenizer,
+                                                          max_length=args.max_seq_length)
 
         validation_dataset = get_balanced_dataset_three_labels(dev_data,
-                                                  tokenizer=tokenizer,
-                                                  max_length=args.max_seq_length)
+                                                               tokenizer=tokenizer,
+                                                               max_length=args.max_seq_length)
+
+        # validation with semeval data only (not shuffled)
+        semeval_dataset, all_ids = get_dataset_from_dataframe(semeval_data,
+                                                              tokenizer=tokenizer,
+                                                              args=args,
+                                                              max_length=args.max_seq_length)
 
     else:
         raise ValueError('dataset not supported: {}'.format(args.dataset))
@@ -373,7 +383,7 @@ def main_worker(gpu, ngpus_per_node, args):
         validate_loader = DataLoader(validation_dataset, batch_size=args.batch_size, shuffle=shuffle,
                                      num_workers=args.workers, pin_memory=True, sampler=validation_sampler)
 
-    stopper = EarlyStopping(min_delta=1e-5)
+    stopper = EarlyStopping(min_delta=1e-3)
 
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
@@ -449,7 +459,7 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
 
         logits = classifier(features.detach())
         labels = batch[3]
-        loss = criterion(logits.view(-1, 2), labels.view(-1))
+        loss = criterion(logits.view(-1, 3), labels.view(-1))
 
         # L1 regularization
         for param in model.module.encoder.parameters():
@@ -527,7 +537,7 @@ def validate(val_loader, semeval_dataset, semeval_ids, model, classifier, criter
             features = model(**inputs)
             logits = classifier(features.detach())
 
-            loss = criterion(logits.view(-1, 2), batch[3].view(-1))
+            loss = criterion(logits.view(-1, 3), batch[3].view(-1))
 
             # normalizes loss to account for batch accumulation
             if args.gradient_accumulation_steps > 1:
@@ -575,7 +585,7 @@ def validate(val_loader, semeval_dataset, semeval_ids, model, classifier, criter
             labels = batch[3]
             features = model(**inputs)
             logits = classifier(features.detach())
-            loss = criterion(logits.view(-1, 2), labels.view(-1))
+            loss = criterion(logits.view(-1, 3), labels.view(-1))
 
             # normalizes loss to account for batch accumulation
             if args.gradient_accumulation_steps > 1:

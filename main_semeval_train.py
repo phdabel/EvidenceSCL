@@ -146,7 +146,7 @@ def train(train_loader, model, criterion_sup, criterion_ce, optimizer, epoch, ar
                   "token_type_ids": batch[2]}
         feature1, feature2 = model(**inputs)
 
-        loss_sup = criterion_sup(feature2, batch[3])
+        loss_sup = criterion_sup(feature2, batch[4])
         loss_ce = criterion_ce(feature1, batch[3])
         loss = loss_sup + loss_ce * args.alpha
 
@@ -215,7 +215,7 @@ def validate(validation_loader, model, criterion_sup, criterion_ce, epoch, args)
                       "token_type_ids": batch[2]}
             feature1, feature2 = model(**inputs)
 
-            loss_sup = criterion_sup(feature2, batch[3])
+            loss_sup = criterion_sup(feature2, batch[4])
             loss_ce = criterion_ce(feature1, batch[3])
             loss = loss_sup + args.alpha * loss_ce
 
@@ -296,7 +296,7 @@ def main_worker(gpu, ngpus_per_node, args):
         # You can increase this for multi-class tasks.
         output_attentions=False,  # Whether the model returns attentions weights.
         output_hidden_states=False,  # Whether the model returns all hidden-states.
-    ), num_classes=2)  # number of classes (0 - contradiction, 1 - entailment)
+    ), num_classes=3)  # number of classes (0 - contradiction, 1 - entailment)
 
     tokenizer = AutoTokenizer.from_pretrained("allenai/biomed_roberta_base")
 
@@ -447,13 +447,22 @@ def main_worker(gpu, ngpus_per_node, args):
     elif args.dataset == 'SEMEVAL23':
         semeval_datafolder = os.path.join(args.data_folder, 'preprocessed', 'SEMEVAL23')
         train_filename = os.path.join(semeval_datafolder, 'balanced_training_dataset.pkl')
+        dev_filename = os.path.join(semeval_datafolder, 'balanced_dev_dataset.pkl')
 
         training_data = pd.read_pickle(train_filename)
         training_data = training_data.reset_index(drop=True)
 
+        dev_data = pd.read_pickle(dev_filename)
+        dev_data = dev_data.reset_index(drop=True)
+
         train_dataset = get_balanced_dataset_three_labels(training_data,
                                                           tokenizer=tokenizer,
                                                           max_length=args.max_seq_length)
+
+        validation_dataset = get_balanced_dataset_three_labels(dev_data,
+                                                               tokenizer=tokenizer,
+                                                               max_length=args.max_seq_length)
+
     else:
         raise ValueError('dataset not supported: {}'.format(args.dataset))
 
@@ -477,7 +486,7 @@ def main_worker(gpu, ngpus_per_node, args):
     # handle - save each epoch
     # model_save_file = os.path.join(args.model_path, f'{args.model_name}.pt')
     # epoch_save_file = os.path.join(args.model_path, f'{args.model_name}_epoch_data.pt')
-    stopper = EarlyStopping(min_delta=1e-5)
+    stopper = EarlyStopping(min_delta=1e-3)
 
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
