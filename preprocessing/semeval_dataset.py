@@ -63,9 +63,9 @@ def get_dataset_from_dataframe_2(data, tokenizer, classdict=None, max_length=128
 
     all_evidence_labels = torch.tensor([sample.evidence_label for i, sample in data.iterrows()], dtype=torch.long)
     if num_labels == 2:
-        all_class_labels = torch.tensor([sample.two_labeled_classe for i, sample in data.iterrows()], dtype=torch.long)
+        all_class_labels = torch.tensor([sample.two_labeled_class for i, sample in data.iterrows()], dtype=torch.long)
     else:
-        all_class_labels = torch.tensor([sample.three_labeled_classe for i, sample in data.iterrows()], dtype=torch.long)
+        all_class_labels = torch.tensor([sample.three_labeled_class for i, sample in data.iterrows()], dtype=torch.long)
 
     all_iids = [sample.iid for i, sample in data.iterrows()]
 
