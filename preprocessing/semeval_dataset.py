@@ -44,6 +44,42 @@ def get_evidences(rct_filepath, section_id):
     return evidences[section_id]
 
 
+def get_dataset_from_dataframe_2(data, tokenizer, classdict=None, max_length=128, num_labels=2, semeval_only=False):
+    if classdict is None:
+        classdict = {'contradiction': 0, 'entailment': 1}
+
+    if semeval_only:
+        data = data[(data.is_evidence_section == True)]
+
+    inputs = tokenizer.batch_encode_plus(
+        [(sample.premises, sample.hypotheses) for i, sample in data.iterrows()],
+        add_special_tokens=True,
+        padding='max_length',
+        truncation=True,
+        max_length=max_length,
+        return_token_type_ids=False,
+        return_attention_mask=True,
+        return_tensors='pt')
+
+    all_evidence_labels = torch.tensor([sample.evidence_label for i, sample in data.iterrows()], dtype=torch.long)
+    if num_labels == 2:
+        all_class_labels = torch.tensor([sample.two_labeled_classe for i, sample in data.iterrows()], dtype=torch.long)
+    else:
+        all_class_labels = torch.tensor([sample.three_labeled_classe for i, sample in data.iterrows()], dtype=torch.long)
+
+    all_iids = [sample.iid for i, sample in data.iterrows()]
+
+    all_token_type_ids = get_token_type_ids(inputs['input_ids'],
+                                            eos_token_id=tokenizer.eos_token_id,
+                                            sep_token_id=tokenizer.sep_token_id,
+                                            max_length=max_length)
+    return TensorDataset(inputs['input_ids'],
+                         inputs['attention_mask'],
+                         all_token_type_ids,
+                         all_class_labels,
+                         all_evidence_labels), all_iids
+
+
 def get_dataset_from_dataframe(data, tokenizer, args, classdict=None, max_length=128, semeval_only=False):
     # default is binary problem
 

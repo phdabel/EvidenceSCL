@@ -18,7 +18,7 @@ import torch.utils.data.distributed
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from preprocessing.semeval_dataset import get_balanced_dataset_three_labels, get_balanced_dataset_two_labels, \
-    get_dataset_from_dataframe
+    get_dataset_from_dataframe, get_dataset_from_dataframe_2
 from util import save_model, AverageMeter, ProgressMeter, EarlyStopping, get_lr
 from torch.utils.data import DataLoader, ConcatDataset
 from bert_model import PairSupConBert, BertForCL
@@ -389,33 +389,53 @@ def main_worker(gpu, ngpus_per_node, args):
     elif args.dataset == 'DATASET_TWO':
 
         semeval_datafolder = os.path.join(args.data_folder, 'preprocessed', args.dataset)
-        train_filename = os.path.join(semeval_datafolder, 'dataset_two_combined_training.pkl')
-        dev_filename = os.path.join(semeval_datafolder, 'dataset_two_combined_validation.pkl')
-        semeval_filename = os.path.join(semeval_datafolder, 'dataset_two_semeval_validation.pkl')
+        mednli_train_filename = os.path.join(semeval_datafolder, 'mednli_train_dataset.pkl')
+        mednli_dev_filename = os.path.join(semeval_datafolder, 'mednli_dev_dataset.pkl')
+        nli4ct_train_filename = os.path.join(semeval_datafolder, 'nli4ct_train_dataset.pkl')
+        nli4ct_dev_filename = os.path.join(semeval_datafolder, 'nli4ct_dev_dataset.pkl')
 
-        training_data = pd.read_pickle(train_filename)
-        training_data = training_data.reset_index(drop=True)
-        dev_data = pd.read_pickle(dev_filename)
-        dev_data = dev_data.reset_index(drop=True)
-        semeval_data = pd.read_pickle(semeval_filename)
-        semeval_data = semeval_data.reset_index(drop=True)
+        mednli_train_data = pd.read_pickle(mednli_train_filename).reset_index(drop=True)
+        nli4ct_train_data = pd.read_pickle(nli4ct_train_filename).reset_index(drop=True)
+        mednli_dev_data = pd.read_pickle(mednli_dev_filename).reset_index(drop=True)
+        nli4ct_dev_data = pd.read_pickle(nli4ct_dev_filename).reset_index(drop=True)
 
-        train_dataset, _ = get_dataset_from_dataframe(training_data,
-                                                      tokenizer=tokenizer,
-                                                      args=args,
-                                                      max_length=args.max_seq_length)
 
-        validation_dataset, _ = get_dataset_from_dataframe(dev_data,
-                                                           tokenizer=tokenizer,
-                                                           args=args,
-                                                           max_length=args.max_seq_length)
+        # train_filename = os.path.join(semeval_datafolder, 'dataset_two_combined_training.pkl')
+        # dev_filename = os.path.join(semeval_datafolder, 'dataset_two_combined_validation.pkl')
+        # semeval_filename = os.path.join(semeval_datafolder, 'dataset_two_semeval_validation.pkl')
 
-        semeval_dataset, _ = get_dataset_from_dataframe(semeval_data,
-                                                        tokenizer=tokenizer,
-                                                        args=args,
-                                                        max_length=args.max_seq_length)
+        # training_data = pd.read_pickle(train_filename)
+        # training_data = training_data.reset_index(drop=True)
+        # dev_data = pd.read_pickle(dev_filename)
+        # dev_data = dev_data.reset_index(drop=True)
+        # semeval_data = pd.read_pickle(semeval_filename)
+        # semeval_data = semeval_data.reset_index(drop=True)
 
-        validation_dataset = ConcatDataset([validation_dataset, semeval_dataset])
+        mednli_dataset, _ = get_dataset_from_dataframe_2(mednli_train_data,
+                                                         tokenizer=tokenizer,
+                                                         max_length=args.max_seq_length,
+                                                         num_labels=args.num_classes)
+
+        nli4ct_dataset, _ = get_dataset_from_dataframe_2(nli4ct_train_data,
+                                                         tokenizer=tokenizer,
+                                                         max_length=args.max_seq_length,
+                                                         semeval_only=True,
+                                                         num_labels=args.num_classes)
+
+        train_dataset = ConcatDataset([mednli_dataset, nli4ct_dataset])
+
+        mednli_dev_dataset, _ = get_dataset_from_dataframe_2(mednli_dev_data,
+                                                             tokenizer=tokenizer,
+                                                             max_length=args.max_seq_length,
+                                                             num_labels=args.num_classes)
+
+        nli4ct_dev_dataset, _ = get_dataset_from_dataframe_2(nli4ct_dev_data,
+                                                             tokenizer=tokenizer,
+                                                             max_length=args.max_seq_length,
+                                                             semeval_only=True,
+                                                             num_labels=args.num_classes)
+
+        validation_dataset = ConcatDataset([mednli_dev_dataset, nli4ct_dev_dataset])
 
     elif args.dataset == 'DATASET_ONE':
 
