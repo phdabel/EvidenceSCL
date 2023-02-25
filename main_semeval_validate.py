@@ -1,12 +1,9 @@
 import os
-import json
 import argparse
 import time
 import random
 import pandas as pd
 import warnings
-import numpy as np
-from statistics import mode
 from transformers import AutoTokenizer
 import torch
 import torch.nn as nn
@@ -20,8 +17,7 @@ import torch.utils.data
 import torch.utils.data.distributed
 from sklearn.metrics import accuracy_score
 
-from preprocessing.semeval_dataset import get_balanced_dataset_three_labels, get_balanced_dataset_two_labels, \
-    get_dataset_from_dataframe
+from preprocessing.semeval_dataset import get_dataset_from_dataframe, get_dataset_from_dataframe_2
 from util import accuracy, save_model, AverageMeter, ProgressMeter, get_lr, EarlyStopping
 from torch.utils.data import DataLoader
 from bert_model import BertForCL, LinearClassifier, PairSupConBert
@@ -81,6 +77,10 @@ def parse_option():
                              'which has N GPUs. This is the fastest way to use PyTorch for either single '
                              'node or multi node data parallel training')
     # parameters
+    parser.add_argument('--evidence_retrieval', action='store_true',
+                        help='If should classify evidences instead of NLI.')
+    parser.add_argument('--num_classes', type=int, default=2,
+                        help='Number of classes for the classifier')
     parser.add_argument('--shuffle', action='store_true',
                         help='shuffle dataloader')
     parser.add_argument('--ckpt', type=str, default='',
@@ -161,17 +161,17 @@ def main_worker(gpu, ngpus_per_node, args):
         # You can increase this for multi-class tasks.
         output_attentions=False,  # Whether the model returns attentions weights.
         output_hidden_states=False,  # Whether the model returns all hidden-states.
-    ), is_train=False, num_classes=2)
+    ), is_train=False, num_classes=args.num_classes)
 
     tokenizer = AutoTokenizer.from_pretrained("allenai/biomed_roberta_base")
 
     classifier = LinearClassifier(BertForCL.from_pretrained(
         "allenai/biomed_roberta_base",  # Use the 12-layer Biomed Roberta model from allenai, with a cased vocab.
-        num_labels=2,  # The number of output labels--2 for binary classification.
+        num_labels=args.num_classes,  # The number of output labels--2 for binary classification.
         # You can increase this for multi-class tasks.
         output_attentions=False,  # Whether the model returns attentions weights.
         output_hidden_states=False,  # Whether the model returns all hidden-states.
-    ), num_classes=2)
+    ), num_classes=args.num_classes)
 
     state_dict = None
     if args.ckpt != '':
@@ -247,6 +247,28 @@ def main_worker(gpu, ngpus_per_node, args):
 
     cudnn.benchmark = True
 
+    if args.dataset == 'NLI4CT':
+        semeval_datafolder = os.path.join(args.data_folder, 'preprocessed', args.dataset)
+        nli4ct_train_filename = os.path.join(semeval_datafolder, 'nli4ct_train_dataset.pkl')
+        nli4ct_dev_filename = os.path.join(semeval_datafolder, 'nli4ct_dev_dataset.pkl')
+
+        nli4ct_train_data = pd.read_pickle(nli4ct_train_filename).reset_index(drop=True)
+        nli4ct_dev_data = pd.read_pickle(nli4ct_dev_filename).reset_index(drop=True)
+
+        train_dataset, _ = get_dataset_from_dataframe_2(nli4ct_train_data,
+                                                        tokenizer=tokenizer,
+                                                        max_length=args.max_seq_length,
+                                                        semeval_only=True,
+                                                        num_labels=args.num_classes)
+
+        validation_dataset, _ = get_dataset_from_dataframe_2(nli4ct_dev_data,
+                                                             tokenizer=tokenizer,
+                                                             max_length=args.max_seq_length,
+                                                             semeval_only=True,
+                                                             num_labels=args.num_classes)
+
+
+
     # construct data loader
     if args.dataset == 'DATASET_EVIDENCES':
         # used to train a evidence identifier
@@ -259,12 +281,12 @@ def main_worker(gpu, ngpus_per_node, args):
         dev_data = pd.read_pickle(dev_filename)
         dev_data = dev_data.reset_index(drop=True)
 
-        train_dataset, _ = get_dataset_from_dataframe(training_data,
+        train_dataset, all_trn_ids = get_dataset_from_dataframe(training_data,
                                                       tokenizer=tokenizer,
                                                       args=args,
                                                       max_length=args.max_seq_length)
 
-        validation_dataset, _ = get_dataset_from_dataframe(dev_data,
+        validation_dataset, all_val_ids = get_dataset_from_dataframe(dev_data,
                                                            tokenizer=tokenizer,
                                                            args=args,
                                                            max_length=args.max_seq_length)
@@ -346,6 +368,13 @@ def main_worker(gpu, ngpus_per_node, args):
             save_file = os.path.join(args.save_folder, 'classifier_last.pth')
             save_model(classifier, optimizer, args, epoch, save_file, True)
 
+        elif not args.multiprocessing_distributed or (args.multiprocessing_distributed and
+                                                    args.rank % ngpus_per_node == 0):
+            save_file = os.path.join(args.save_folder, 'classifier_current.pt')
+            if epoch % 5 == 0:
+                save_file = os.path.join(args.save_folder, 'classifier_epoch_%d.pt' % epoch)
+            save_model(model, optimizer, args, args.epochs, save_file, False)
+
     if not args.multiprocessing_distributed or (args.multiprocessing_distributed
                                                 and args.rank % ngpus_per_node == 0):
         save_file = os.path.join(args.save_folder, 'classifier_last.pth')
@@ -390,8 +419,8 @@ def train(train_loader, model, classifier, criterion, optimizer, epoch, args):
             features = model(**inputs)
 
         logits = classifier(features.detach())
-        labels = batch[4]
-        loss = criterion(logits.view(-1, 2), labels.view(-1))
+        labels = batch[4] if args.evidence_retrieval else batch[3]
+        loss = criterion(logits.view(-1, args.num_classes), labels.view(-1))
 
         # L1 regularization
         for param in model.module.encoder.parameters():
@@ -450,7 +479,8 @@ def validate(semeval_dataset, semeval_ids, model, classifier, criterion, epoch, 
                 semeval_dataset[i][0].cuda(non_blocking=True),
                 semeval_dataset[i][1].cuda(non_blocking=True),
                 semeval_dataset[i][2].cuda(non_blocking=True),
-                semeval_dataset[i][3].cuda(non_blocking=True)
+                semeval_dataset[i][3].cuda(non_blocking=True),
+                semeval_dataset[i][4].cuda(non_blocking=True)
             ]
 
             inputs = {"input_ids": batch[0].unsqueeze(0),
@@ -460,7 +490,8 @@ def validate(semeval_dataset, semeval_ids, model, classifier, criterion, epoch, 
             features = model(**inputs)
             logits = classifier(features.detach())
 
-            loss = criterion(logits.view(-1, 2), batch[4].view(-1))
+            label = batch[4] if args.evidence_retrieval else batch[3]
+            loss = criterion(logits.view(-1, args.num_classes), label.view(-1))
 
             # normalizes loss to account for batch accumulation
             if args.gradient_accumulation_steps > 1:
@@ -471,7 +502,7 @@ def validate(semeval_dataset, semeval_ids, model, classifier, criterion, epoch, 
             _, _pred = logits.topk(1, 1, True, True)
             res["predicted"].append(_pred.item())
             res["iid"].append(_id)
-            res["gold_label"].append(batch[4].item())
+            res["gold_label"].append(label.item())
 
             # measure elapsed time
             semeval_batch_time.update(time.time() - end)
