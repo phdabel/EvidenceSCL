@@ -91,7 +91,7 @@ def parse_option():
     args = parser.parse_args()
 
     args.model_path = './save/{}_models'.format(args.dataset)
-    args.model_name = '{}_{}_lr_{}_decay_{}_bsz_{}_grad_{}_l1_coefficient_{}'.\
+    args.model_name = '{}_{}_lr_{}_decay_{}_bsz_{}_grad_{}_l1_coefficient_{}'. \
         format(args.dataset, args.model, args.learning_rate, args.weight_decay, args.batch_size,
                args.gradient_accumulation_steps, args.coefficient)
 
@@ -255,22 +255,19 @@ def main_worker(gpu, ngpus_per_node, args):
         nli4ct_train_data = pd.read_pickle(nli4ct_train_filename).reset_index(drop=True)
         nli4ct_dev_data = pd.read_pickle(nli4ct_dev_filename).reset_index(drop=True)
 
-        train_dataset, _ = get_dataset_from_dataframe_2(nli4ct_train_data,
-                                                        tokenizer=tokenizer,
-                                                        max_length=args.max_seq_length,
-                                                        semeval_only=True,
-                                                        num_labels=args.num_classes)
+        train_dataset, train_iids = get_dataset_from_dataframe_2(nli4ct_train_data,
+                                                                 tokenizer=tokenizer,
+                                                                 max_length=args.max_seq_length,
+                                                                 semeval_only=True,
+                                                                 num_labels=args.num_classes)
 
-        validation_dataset, _ = get_dataset_from_dataframe_2(nli4ct_dev_data,
-                                                             tokenizer=tokenizer,
-                                                             max_length=args.max_seq_length,
-                                                             semeval_only=True,
-                                                             num_labels=args.num_classes)
+        validation_dataset, val_iids = get_dataset_from_dataframe_2(nli4ct_dev_data,
+                                                                    tokenizer=tokenizer,
+                                                                    max_length=args.max_seq_length,
+                                                                    semeval_only=True,
+                                                                    num_labels=args.num_classes)
 
-
-
-    # construct data loader
-    if args.dataset == 'DATASET_EVIDENCES':
+    elif args.dataset == 'DATASET_EVIDENCES':
         # used to train a evidence identifier
         semeval_datafolder = os.path.join(args.data_folder, 'preprocessed', args.dataset)
         train_filename = os.path.join(semeval_datafolder, 'dataset_two_evidence_training.pkl')
@@ -282,14 +279,14 @@ def main_worker(gpu, ngpus_per_node, args):
         dev_data = dev_data.reset_index(drop=True)
 
         train_dataset, all_trn_ids = get_dataset_from_dataframe(training_data,
-                                                      tokenizer=tokenizer,
-                                                      args=args,
-                                                      max_length=args.max_seq_length)
+                                                                tokenizer=tokenizer,
+                                                                args=args,
+                                                                max_length=args.max_seq_length)
 
         validation_dataset, all_val_ids = get_dataset_from_dataframe(dev_data,
-                                                           tokenizer=tokenizer,
-                                                           args=args,
-                                                           max_length=args.max_seq_length)
+                                                                     tokenizer=tokenizer,
+                                                                     args=args,
+                                                                     max_length=args.max_seq_length)
     elif args.dataset == 'DATASET_TWO':
 
         semeval_datafolder = os.path.join(args.data_folder, 'preprocessed', args.dataset)
@@ -306,10 +303,10 @@ def main_worker(gpu, ngpus_per_node, args):
 
         # we keep only semeval data when training the classifier
         train_dataset, training_ids = get_dataset_from_dataframe(training_data,
-                                                      tokenizer=tokenizer,
-                                                      args=args,
-                                                      max_length=args.max_seq_length,
-                                                      semeval_only=True)
+                                                                 tokenizer=tokenizer,
+                                                                 args=args,
+                                                                 max_length=args.max_seq_length,
+                                                                 semeval_only=True)
 
         # validation with mednli and multinli
         validation_dataset, _ = get_dataset_from_dataframe(dev_data,
@@ -351,11 +348,10 @@ def main_worker(gpu, ngpus_per_node, args):
               .format(epoch, time2 - time1, loss, train_acc))
 
         v_time1 = time.time()
-        validation_loss, semeval_loss, acc = validate(semeval_dataset, all_ids, model, classifier, criterion,
-                                                      epoch, args)
+        semeval_loss, acc = validate(validation_dataset, val_iids, model, classifier, criterion, epoch, args)
         v_time2 = time.time()
-        print('epoch {}, total time {:.2f}, validation loss {:.7f}, semeval loss {:.7f}, validation accuracy {:.2f}'
-              .format(epoch, v_time2 - v_time1, validation_loss, semeval_loss, acc.item()))
+        print('epoch {}, total time {:.2f}, semeval loss {:.7f}, validation accuracy {:.2f}'
+              .format(epoch, v_time2 - v_time1, semeval_loss, acc.item()))
 
         stopper(loss, semeval_loss)
         if stopper.early_stop:
@@ -369,7 +365,7 @@ def main_worker(gpu, ngpus_per_node, args):
             save_model(classifier, optimizer, args, epoch, save_file, True)
 
         elif not args.multiprocessing_distributed or (args.multiprocessing_distributed and
-                                                    args.rank % ngpus_per_node == 0):
+                                                      args.rank % ngpus_per_node == 0):
             save_file = os.path.join(args.save_folder, 'classifier_current.pt')
             if epoch % 5 == 0:
                 save_file = os.path.join(args.save_folder, 'classifier_epoch_%d.pt' % epoch)
