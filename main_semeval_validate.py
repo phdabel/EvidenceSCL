@@ -255,15 +255,20 @@ def main_worker(gpu, ngpus_per_node, args):
         nli4ct_train_data = pd.read_pickle(nli4ct_train_filename).reset_index(drop=True)
         nli4ct_dev_data = pd.read_pickle(nli4ct_dev_filename).reset_index(drop=True)
 
+        classdict = {'contradiction': 0, 'entailment': 1} if args.num_classes == 2 else {'contradiction': 0, 'neutral': 1, 'entailmment': 2}
+        print(classdict)
+
         train_dataset, train_iids = get_dataset_from_dataframe_2(nli4ct_train_data,
                                                                  tokenizer=tokenizer,
                                                                  max_length=args.max_seq_length,
+                                                                 classdict=classdict,
                                                                  semeval_only=True,
                                                                  num_labels=args.num_classes)
 
         validation_dataset, val_iids = get_dataset_from_dataframe_2(nli4ct_dev_data,
                                                                     tokenizer=tokenizer,
                                                                     max_length=args.max_seq_length,
+                                                                    classdict=classdict,
                                                                     semeval_only=True,
                                                                     num_labels=args.num_classes)
 
