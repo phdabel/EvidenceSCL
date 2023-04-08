@@ -366,11 +366,12 @@ def main_worker(gpu, ngpus_per_node, args):
             print("Early stop")
             break
 
-        if best_acc1 is None or acc > best_acc1:
-            best_acc1 = acc
-            print('best accuracy: {:.3f}'.format(best_acc1.item()))
+        print("Current best accuracy: %2.3f" % best_acc1)
+        if best_acc1 is None or acc.item() > best_acc1:
+            best_acc1 = acc.item()
+            print('best accuracy: {:.3f}'.format(best_acc1))
             save_file = os.path.join(args.save_folder, 'classifier_last.pth')
-            save_model(classifier, optimizer, args, epoch, save_file, True)
+            save_model(classifier, optimizer, args, epoch, save_file, True, acc)
 
         elif not args.multiprocessing_distributed or (args.multiprocessing_distributed and
                                                       args.rank % ngpus_per_node == 0):
@@ -521,7 +522,7 @@ def validate(semeval_dataset, semeval_ids, model, classifier, criterion, epoch, 
 
         results_df = pd.DataFrame(res)
         acc = accuracy_score(results_df.gold_label, results_df.predicted, normalize=True)
-        print(f'Sem Eval Validation Accuracy: {acc:.3f}')
+        print(f'Sem Eval Validation Accuracy: {acc*100:.3f}')
         acc = torch.tensor([float(acc * 100)]).cuda()
 
     return semeval_losses.avg, acc

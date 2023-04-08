@@ -161,13 +161,14 @@ def get_lr(optimizer):
         return param_group['lr']
 
 
-def save_model(model, optimizer, opt, epoch, save_file, is_best):
+def save_model(model, optimizer, opt, epoch, save_file, is_best, best_acc=None):
     print('==> Saving...')
     state = {
         'opt': opt,
         'model': model.state_dict(),
         'optimizer': optimizer.state_dict(),
         'epoch': epoch,
+        'best_acc1': best_acc
     }
     torch.save(state, save_file)
     if is_best:
