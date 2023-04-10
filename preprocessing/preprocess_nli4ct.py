@@ -92,7 +92,7 @@ def prepare_two_labeled_dataset(nli4ct_df, test=False):
             df['class_label'].append(None)
 
     common_criteria = '(evidence_label == 1)'
-    criteria_ = "(rct == @rct_ & evidence_section == @section_a & three_labeled_class != @label_a & order_ == @order_a)"
+    criteria_ = "(rct == @rct_ & evidence_section == @section_a & two_labeled_class != @label_a & order_ == @order_a)"
     query = "%s & %s" % (common_criteria, criteria_)
 
     nli4ct_instances = dict(uuid=list(), iid=list(), itype=list(), rct=list(), trial=list(), premise=list(),
@@ -120,7 +120,7 @@ def prepare_two_labeled_dataset(nli4ct_df, test=False):
                 # if there are more than one we prioritize instances with the same value for the `trial`
                 # column (Primary|Secondary)
                 append_instance(nli4ct_instances, uuid_, row_, __test=test)
-                append_instance(nli4ct_instances, uuid_, neg_sample.query('trial == @row.trial').iloc[0], __test=test)
+                append_instance(nli4ct_instances, uuid_, neg_sample.query('trial == @row_.trial').iloc[0], __test=test)
             else:
                 # otherwise we save instances with no negative samples in a separated structure
                 append_instance(no_neg_nli4ct_instances, uuid_, row_, __test=test)
