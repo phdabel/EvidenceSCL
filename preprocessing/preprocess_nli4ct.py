@@ -133,6 +133,9 @@ def prepare_two_labeled_dataset(nli4ct_df, test=False):
 def preprocess_data(input_dir=os.path.join('../datasets/raw/Complete_dataset'),
                     target_dir=os.path.join('../datasets/preprocessed/nli4ct')):
 
+    if not os.path.exists(target_dir):
+        os.makedirs(target_dir)
+
     train_file, test_file, dev_file = None, None, None
     for file_ in os.listdir(input_dir):
         if fnmatch.fnmatch(file_, '*train*'):
