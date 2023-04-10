@@ -11,12 +11,20 @@ pip install wget
 ```
 
 ## Fetch the data to train and test the model
+
+
+Downloads the dataset and extracts its content into the target directory (Default value: `target_dir='datasets/raw'`).
+Dataset argument accepts `NLI4CT`, `MultiNLI` or the URL to a custom dataset.
+
 ```
-fetch_data.py [-h] [--dataset_url DATASET_URL]
+fetch_data.py [-h] [--dataset DATASET]
               [--target_dir TARGET_DIR]
 ```
 
 ## Preprocess the data
+
+
+
 ```
 preprocess_*.py [-h] [--config CONFIG]
 ```
