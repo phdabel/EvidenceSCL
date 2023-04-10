@@ -1,11 +1,9 @@
-# PairSCL - pair-level supervised contrastive learning
-
-The source code of paper ["PAIR-LEVEL SUPERVISED CONTRASTIVE LEARNING FOR NATURAL LANGUAGE INFERENCE"](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9746499) published at ICASSP 2022.
+# Team INF-UFRGS at SemEval-2023 Task 7: Supervised Contrastive Learning for Pair-level Sentence Classification and Evidence Retrieval
 
 ## Creating the environment
 ```
-conda create -n pairscl python=3.9
-conda activate pairscl
+conda create -n evidencescl python=3.9
+conda activate evidencescl
 pip install -U pip
 conda install pytorch torchvision torchaudio pytorch-cuda=11.7 -c pytorch -c nvidia
 pip install transformers
@@ -42,13 +40,9 @@ python main_test.py --dataset Dataset --gpu GPU --ckpt_bert pathToEncoder --ckpt
 # Reference
 If the code is used in your research, hope you can cite our paper as follows:
 ```
-@INPROCEEDINGS{9746499,
-  author={Li, Shu’ang and Hu, Xuming and Lin, Li and Wen, Lijie},
-  booktitle={ICASSP 2022 - 2022 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP)}, 
-  title={Pair-Level Supervised Contrastive Learning for Natural Language Inference}, 
-  year={2022},
-  volume={},
-  number={},
-  pages={8237-8241},
-  doi={10.1109/ICASSP43922.2022.9746499}}
+@inproceedings{CorreaDias+2023,
+  author={Abel Corrêa Dias and }, 
+  title={Team INF-UFRGS at SemEval-2023 Task 7: Supervised Contrastive Learning for Pair-level Sentence Classification and Evidence Retrieval}, 
+  year={2023}
+}
   ```
