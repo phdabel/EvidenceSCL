@@ -91,12 +91,25 @@ def get_args():
                         help='Path to the directory containing the MultiNLI dataset. (default: %(default)s)')
     parser.add_argument('--target_dir', type=str, default=os.path.join('../datasets/preprocessed/multi_nli'),
                         help='Path to the directory where the preprocessed data will be stored. (default: %(default)s)')
-    parser.add_argument('--label_list', type=str, default='neutral,entailment,contradiction',
-                        help='Comma-separated list of labels to be used for training. (default: %(default)s)')
-    return parser.parse_args()
+    parser.add_argument('--label_list', default='neutral,entailment,contradiction',
+                        type=lambda s: [item for item in s.split(',')],
+                        help='List of labels to be considered for the classification task. '
+                             '(Default: neutral, entailment, contradiction)')
+
+    __args = parser.parse_args()
+
+    if not os.path.exists(__args.target_dir):
+        os.makedirs(__args.target_dir)
+
+    return __args
 
 
 if __name__ == '__main__':
     args = get_args()
-    preprocess_data(args.input_dir, args.target_dir, args.label_list.split(','))
+
+    print(20 * "=", "Preprocessing Dataset:", 20 * '=')
+    print("Dataset name: MultiNLI")
+    print("Numer of labels: %d" % len(args.label_list))
+
+    preprocess_data(args.input_dir, args.target_dir, args.label_list)
     sys.exit(0)

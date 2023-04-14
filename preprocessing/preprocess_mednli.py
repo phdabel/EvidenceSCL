@@ -4,14 +4,15 @@ import json
 import re
 import fnmatch
 import pandas as pd
+from tqdm import tqdm
 from argparse import ArgumentParser
 import uuid
 
 
-def get_dataframe(filename, label_list=['entailment', 'contradiction']):
+def get_dataframe(filename, label_list):
     __uuid, iid, premise, hypothesis, label = [], [], [], [], []
     with open(filename, 'r', encoding='utf-8') as input_data:
-        for line in input_data.readlines():
+        for _, line in tqdm(enumerate(input_data.readlines())):
             instance = json.loads(line)
 
             if instance['gold_label'] not in label_list:
@@ -33,17 +34,9 @@ def __remove_artifacts(mednli_dataframe):
                       spans=list(), masks=list(), class_label=list())
 
     def get_mask(artifact):
-        """
-        A very straightforward way to replace artifacts with a mask token.
-        Args:
-            artifact: The artifact to be replaced.
-
-        Returns: The mask token.
-
-        """
-        if 'ospital' in artifact:
+        if "hospital" in artifact or "Hospital" in artifact:
             return '<ORG>'
-        elif 'ocation' in artifact:
+        elif 'location' in artifact or 'Location' in artifact:
             return '<LOC>'
         elif 'Name' in artifact or 'name' in artifact:
             return '<PERSON>'
@@ -84,11 +77,7 @@ def __remove_artifacts(mednli_dataframe):
     return tmp
 
 
-def prepare_two_labeled_dataset(filename):
-    return __remove_artifacts(get_dataframe(filename))
-
-
-def preprocess_data(input_dir, target_dir):
+def preprocess_data(input_dir, target_dir, label_list):
 
     train_file, test_file, dev_file = None, None, None
     for file_ in os.listdir(input_dir):
@@ -99,13 +88,13 @@ def preprocess_data(input_dir, target_dir):
         elif fnmatch.fnmatch(file_, '*dev*.jsonl'):
             dev_file = os.path.join(input_dir, file_)
 
-    mednli_train_df = prepare_two_labeled_dataset(train_file)
-    mednli_val_df = prepare_two_labeled_dataset(dev_file)
-    mednli_test_df = prepare_two_labeled_dataset(test_file)
+    mednli_train_df = __remove_artifacts(get_dataframe(train_file, label_list))
+    mednli_val_df = __remove_artifacts(get_dataframe(dev_file, label_list))
+    mednli_test_df = __remove_artifacts(get_dataframe(test_file, label_list))
 
-    mednli_train_df.to_pickle(os.path.join(target_dir, 'mednli_2L_train.pkl'))
-    mednli_val_df.to_pickle(os.path.join(target_dir, 'mednli_2L_val.pkl'))
-    mednli_test_df.to_pickle(os.path.join(target_dir, 'mednli_2L_test.pkl'))
+    mednli_train_df.to_pickle(os.path.join(target_dir, 'mednli_%dL_train.pkl' % len(label_list)))
+    mednli_val_df.to_pickle(os.path.join(target_dir, 'mednli_%dL_val.pkl' % len(label_list)))
+    mednli_test_df.to_pickle(os.path.join(target_dir, 'mednli_%dL_test.pkl' % len(label_list)))
 
 
 def get_args():
@@ -114,6 +103,10 @@ def get_args():
                         help='Path to the directory containing the raw MedNLI dataset.')
     parser.add_argument('--target_dir', type=str, default=os.path.join('../datasets/preprocessed/mednli'),
                         help='Path to the directory where the preprocessed MedNLI dataset will be stored.')
+    parser.add_argument('--label_list', default='neutral,entailment,contradiction',
+                        type=lambda s: [item for item in s.split(',')],
+                        help='List of labels to be considered for the classification task. '
+                             '(Default: neutral, entailment, contradiction)')
 
     __args = parser.parse_args()
 
@@ -125,6 +118,11 @@ def get_args():
 
 if __name__ == '__main__':
     args = get_args()
-    preprocess_data(args.input_dir, args.target_dir)
+
+    print(20 * "=", "Preprocessing Dataset:", 20 * '=')
+    print("Dataset name: MedNLI")
+    print("Numer of labels: %d" % len(args.label_list))
+
+    preprocess_data(args.input_dir, args.target_dir, args.label_list)
 
     sys.exit(0)
