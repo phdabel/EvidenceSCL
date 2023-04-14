@@ -122,7 +122,7 @@ def save_model(model, optimizer, opt, epoch, save_file, is_best):
     print('==> Saving...')
     state = {
         'opt': opt,
-        'model': model.state_dict(),
+        'models': model.state_dict(),
         'optimizer': optimizer.state_dict(),
         'epoch': epoch,
     }

@@ -12,7 +12,7 @@ class SupConLoss(nn.Module):
         self.base_temperature = base_temperature
 
     def forward(self, features, labels=None, mask=None):
-        """Compute loss for model.
+        """Compute loss for models.
 
         Args:
             features: hidden vector of shape [bsz, ...].

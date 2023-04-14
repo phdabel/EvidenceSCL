@@ -20,11 +20,11 @@ label_map = ["contradiction", "entailment", "neutral"]
 def parse_option():
     parser = argparse.ArgumentParser('argument for training')
 
-    # model dataset
+    # models dataset
     parser.add_argument("--max_seq_length", default=358, type=int,
                         help="The maximum total input sequence length after tokenization. Sequences longer "
                              "than this will be truncated, sequences shorter will be padded.")
-    parser.add_argument('--model', type=str, default='ROBERTA')
+    parser.add_argument('--models', type=str, default='ROBERTA')
     parser.add_argument('--dataset', type=str, default='SEMEVAL23',
                         choices=['SEMEVAL23'], help='dataset')
     parser.add_argument('--data_folder', type=str, default='./datasets', help='path to custom dataset')
@@ -38,8 +38,8 @@ def parse_option():
                         help='GPU id to use.')
 
     # ckpt
-    parser.add_argument('--ckpt_bert', type=str, default='', help="path to pre-trained model")
-    parser.add_argument('--ckpt_classifier', type=str, default='', help="path to pre-trained model")
+    parser.add_argument('--ckpt_bert', type=str, default='', help="path to pre-trained models")
+    parser.add_argument('--ckpt_classifier', type=str, default='', help="path to pre-trained models")
     args = parser.parse_args()
 
     return args
@@ -117,20 +117,20 @@ def main():
         print("Use GPU: {} for training".format(args.gpu))
 
     model = PairSupConBert(BertForCL.from_pretrained(
-        "allenai/biomed_roberta_base",  # Use the 12-layer Biomed Roberta model, with a cased vocab.
+        "allenai/biomed_roberta_base",  # Use the 12-layer Biomed Roberta models, with a cased vocab.
         num_labels=358,  # The number of output labels--2 for binary classification.
         # You can increase this for multi-class tasks.
-        output_attentions=False,  # Whether the model returns attentions weights.
-        output_hidden_states=False,  # Whether the model returns all hidden-states.
+        output_attentions=False,  # Whether the models returns attentions weights.
+        output_hidden_states=False,  # Whether the models returns all hidden-states.
     ), is_train=False)
     tokenizer = AutoTokenizer.from_pretrained("allenai/biomed_roberta_base")
 
     classifier = LinearClassifier(BertForCL.from_pretrained(
-        "allenai/biomed_roberta_base",  # Use the 12-layer Biomed Roberta model, with a cased vocab.
+        "allenai/biomed_roberta_base",  # Use the 12-layer Biomed Roberta models, with a cased vocab.
         num_labels=3,  # The number of output labels--2 for binary classification.
         # You can increase this for multi-class tasks.
-        output_attentions=False,  # Whether the model returns attentions weights.
-        output_hidden_states=False,  # Whether the model returns all hidden-states.
+        output_attentions=False,  # Whether the models returns attentions weights.
+        output_hidden_states=False,  # Whether the models returns all hidden-states.
     ))
     ckpt_bert = torch.load(args.ckpt_bert, map_location='cpu')
     ckpt_classifier = torch.load(args.ckpt_classifier, map_location='cpu')
@@ -142,8 +142,8 @@ def main():
         model = model.cuda(args.gpu)
         classifier = classifier.cuda(args.gpu)
 
-    model.load_state_dict(ckpt_bert['model'])
-    classifier.load_state_dict(ckpt_classifier['model'])
+    model.load_state_dict(ckpt_bert['models'])
+    classifier.load_state_dict(ckpt_classifier['models'])
 
     cudnn.benchmark = True
 

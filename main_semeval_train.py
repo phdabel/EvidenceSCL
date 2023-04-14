@@ -25,11 +25,11 @@ from losses import SupConLoss
 
 def parse_option():
     parser = argparse.ArgumentParser('argument for training')
-    # model dataset
+    # models dataset
     parser.add_argument("--max_seq_length", default=128, type=int, 
                         help="The maximum total input sequence length after tokenization. "
                              "Sequences longer than this will be truncated, sequences shorter will be padded.")
-    parser.add_argument('--model', type=str, default='ROBERTA')
+    parser.add_argument('--models', type=str, default='ROBERTA')
     parser.add_argument('--dataset', type=str, default='SEMEVAL23',
                         choices=['SEMEVAL23'], help='dataset')
     parser.add_argument('--data_folder', type=str, default='./datasets', help='path to custom dataset')
@@ -43,7 +43,7 @@ def parse_option():
     parser.add_argument('--resume', default='', type=str, metavar='PATH',
                         help='path to latest checkpoint (default: none)')
     parser.add_argument('--pretrained', dest='pretrained', action='store_true',
-                        help='use pre-trained model')
+                        help='use pre-trained models')
     parser.add_argument('--batch_size', type=int, default=64,
                         help='batch_size (default: 64)')
     parser.add_argument('--learning_rate', type=float, default=5e-5,
@@ -221,11 +221,11 @@ def main_worker(gpu, ngpus_per_node, args):
                                 world_size=args.world_size, rank=args.rank)
     
     model = PairSupConBert(BertForCL.from_pretrained(
-        "allenai/biomed_roberta_base",  # Use the 12-layer Biomed Roberta model from allenai, with a cased vocab.
+        "allenai/biomed_roberta_base",  # Use the 12-layer Biomed Roberta models from allenai, with a cased vocab.
         num_labels=args.max_seq_length,  # The number of output labels--2 for binary classification.
         # You can increase this for multi-class tasks.
-        output_attentions=False,  # Whether the model returns attentions weights.
-        output_hidden_states=False,  # Whether the model returns all hidden-states.
+        output_attentions=False,  # Whether the models returns attentions weights.
+        output_hidden_states=False,  # Whether the models returns all hidden-states.
     ))
 
     tokenizer = AutoTokenizer.from_pretrained("allenai/biomed_roberta_base")
@@ -269,7 +269,7 @@ def main_worker(gpu, ngpus_per_node, args):
             if args.gpu is None:
                 checkpoint = torch.load(args.resume)
             else:
-                # Map model to be loaded to specified single gpu.
+                # Map models to be loaded to specified single gpu.
                 loc = 'cuda:{}'.format(args.gpu)
                 checkpoint = torch.load(args.resume, map_location=loc)
             args.start_epoch = checkpoint['epoch']
@@ -278,7 +278,7 @@ def main_worker(gpu, ngpus_per_node, args):
             if args.gpu is not None:
                 # best_acc1 may be from a checkpoint from a different GPU
                 best_acc1 = best_acc1.to(args.gpu)
-            model.load_state_dict(checkpoint['model'])
+            model.load_state_dict(checkpoint['models'])
             optimizer.load_state_dict(checkpoint['optimizer'])
             print("=> loaded checkpoint '{}' (epoch {})"
                   .format(args.resume, checkpoint['epoch']))
@@ -327,7 +327,7 @@ def main_worker(gpu, ngpus_per_node, args):
         time2 = time.time()
         print('epoch {}, total time {:.2f}, loss {:.7f}'.format(epoch, (time2 - time1), loss))
         
-    # save the last model
+    # save the last models
     if not args.multiprocessing_distributed or (args.multiprocessing_distributed and args.rank % ngpus_per_node == 0):
         save_file = os.path.join(args.save_folder, 'last.pth')
         save_model(model, optimizer, args, args.epochs, save_file, False)  
