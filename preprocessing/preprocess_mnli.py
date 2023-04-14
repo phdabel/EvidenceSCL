@@ -1,164 +1,102 @@
-import os
 import sys
-import pickle
-import argparse
-import fnmatch
+import os
 import json
+import fnmatch
+import pandas as pd
+from argparse import ArgumentParser
+import uuid
 
-from data_processor import Preprocessor
+
+def get_dataframe(filename, label_list):
+
+    # workaround to define labels based on iid instead of gold_label
+    iid_map = {'n': 'neutral', 'e': 'entailment', 'c': 'contradiction'}
+
+    with open(filename, 'r', encoding='utf-8') as input_data:
+        __uuid, iid, prompt_id, genre, hypothesis, premise, class_label = [], [], [], [], [], [], []
+        for line in input_data.readlines():
+            instance = json.loads(line)
+
+            if iid_map[instance['pairID'][-1]] not in label_list:
+                continue
+
+            __uuid.append(uuid.uuid4())
+            iid.append(instance['pairID'])
+            prompt_id.append(instance['promptID'])
+            genre.append(instance['genre'])
+            hypothesis.append(instance['sentence1'])
+            premise.append(instance['sentence2'])
+            class_label.append(iid_map[instance['pairID'][-1]])
+
+    return pd.DataFrame(
+        {'uuid': __uuid, 'iid': iid, 'promptID': prompt_id, 'genre': genre, 'hypothesis': hypothesis,
+         'premise': premise, 'class_label': class_label})\
+        .sort_values(by=['iid'], ascending=[False]).reset_index(drop=True)
 
 
-def preprocess_MNLI_data(inputdir,
-                         targetdir,
-                         lowercase=False,
-                         ignore_punctuation=False,
-                         num_words=None,
-                         stopwords=[],
-                         labeldict={},
-                         bos=None,
-                         eos=None):
+def __remove_incomplete_instances(dataframe, num_labels=3):
     """
-    Preprocess the data from the MultiNLI corpus so it can be used by the
-    ESIM model.
-    Compute a worddict from the train set, and transform the words in
-    the sentences of the corpus to their indices, as well as the labels.
-    Build an embedding matrix from pretrained word vectors.
-    The preprocessed data is saved in pickled form in some target directory.
-
+    Remove instances that do not have all the labels.
     Args:
-        inputdir: The path to the directory containing the NLI corpus.
-        embeddings_file: The path to the file containing the pretrained
-            word vectors that must be used to build the embedding matrix.
-        targetdir: The path to the directory where the preprocessed data
-            must be saved.
-        lowercase: Boolean value indicating whether to lowercase the premises
-            and hypotheseses in the input data. Defautls to False.
-        ignore_punctuation: Boolean value indicating whether to remove
-            punctuation from the input data. Defaults to False.
-        num_words: Integer value indicating the size of the vocabulary to use
-            for the word embeddings. If set to None, all words are kept.
-            Defaults to None.
-        stopwords: A list of words that must be ignored when preprocessing
-            the data. Defaults to an empty list.
-        bos: A string indicating the symbol to use for beginning of sentence
-            tokens. If set to None, bos tokens aren't used. Defaults to None.
-        eos: A string indicating the symbol to use for end of sentence tokens.
-            If set to None, eos tokens aren't used. Defaults to None.
+        dataframe:
+        num_labels:
+
+    Returns:
+
     """
-    if not os.path.exists(targetdir):
-        os.makedirs(targetdir)
-
-    # Retrieve the train, dev and test data files from the dataset directory.
-    train_file = ""
-    matched_dev_file = ""
-    mismatched_dev_file = ""
-    matched_test_file = ""
-    mismatched_test_file = ""
-    for file in os.listdir(inputdir):
-        if fnmatch.fnmatch(file, "*_train.txt"):
-            train_file = file
-        elif fnmatch.fnmatch(file, "*_dev_matched.txt"):
-            matched_dev_file = file
-        elif fnmatch.fnmatch(file, "*_dev_mismatched.txt"):
-            mismatched_dev_file = file
-        elif fnmatch.fnmatch(file, "*_test_matched_unlabeled.txt"):
-            matched_test_file = file
-        elif fnmatch.fnmatch(file, "*_test_mismatched_unlabeled.txt"):
-            mismatched_test_file = file
-
-    # -------------------- Train data preprocessing -------------------- #
-    preprocessor = Preprocessor(lowercase=lowercase,
-                                ignore_punctuation=ignore_punctuation,
-                                num_words=num_words,
-                                stopwords=stopwords,
-                                labeldict=labeldict,
-                                bos=bos,
-                                eos=eos)
-
-    print(20*"=", " Preprocessing train set ", 20*"=")
-    print("\t* Reading data...")
-    data = preprocessor.read_data(os.path.join(inputdir, train_file))
-
-    print("\t* Computing worddict and saving it...")
-    preprocessor.build_worddict(data)
-    with open(os.path.join(targetdir, "worddict.pkl"), "wb") as pkl_file:
-        pickle.dump(preprocessor.worddict, pkl_file)
-
-    # print("\t* Transforming words in premises and hypotheses to indices...")
-    # transformed_data = preprocessor.transform_to_indices(data)
-    print("\t* Saving result...")
-    with open(os.path.join(targetdir, "train_data.pkl"), "wb") as pkl_file:
-        pickle.dump(data, pkl_file)
-
-    # -------------------- Validation data preprocessing -------------------- #
-    print(20*"=", " Preprocessing dev sets ", 20*"=")
-    print("\t* Reading matched dev data...")
-    data = preprocessor.read_data(os.path.join(inputdir, matched_dev_file))
-
-    # print("\t* Transforming words in premises and hypotheses to indices...")
-    # transformed_data = preprocessor.transform_to_indices(data)
-    print("\t* Saving result...")
-    with open(os.path.join(targetdir, "matched_dev_data.pkl"), "wb") as pkl_file:
-        pickle.dump(data, pkl_file)
-
-    print("\t* Reading mismatched dev data...")
-    data = preprocessor.read_data(os.path.join(inputdir, mismatched_dev_file))
-
-    # print("\t* Transforming words in premises and hypotheses to indices...")
-    # transformed_data = preprocessor.transform_to_indices(data)
-    print("\t* Saving result...")
-    with open(os.path.join(targetdir, "mismatched_dev_data.pkl"), "wb") as pkl_file:
-        pickle.dump(data, pkl_file)
-
-    # # -------------------- Test data preprocessing -------------------- #
-    # print(20*"=", " Preprocessing test sets ", 20*"=")
-    # print("\t* Reading matched test data...")
-    # data = preprocessor.read_data(os.path.join(inputdir, matched_test_file))
-
-    # # print("\t* Transforming words in premises and hypotheses to indices...")
-    # # transformed_data = preprocessor.transform_to_indices(data)
-    # print("\t* Saving result...")
-    # with open(os.path.join(targetdir, "matched_test_data.pkl"), "wb") as pkl_file:
-    #     pickle.dump(data, pkl_file)
-
-    # print("\t* Reading mismatched test data...")
-    # data = preprocessor.read_data(os.path.join(inputdir, mismatched_test_file))
-
-    # print("\t* Transforming words in premises and hypotheses to indices...")
-    # transformed_data = preprocessor.transform_to_indices(data)
-    # print("\t* Saving result...")
-    # with open(os.path.join(targetdir, "mismatched_test_data.pkl"), "wb") as pkl_file:
-    #     pickle.dump(data, pkl_file)
+    tmp_agg = dataframe.groupby('promptID').aggregate(list)
+    tmp_agg['prompts_by_class'] = [len(row['class_label']) for i, row in tmp_agg.iterrows()]
+    [dataframe.drop(dataframe[dataframe.uuid.isin(row.uuid)].index.tolist(), inplace=True)
+     for i, row in tmp_agg[tmp_agg.prompts_by_class != num_labels].iterrows()]
+    del tmp_agg
+    return True
 
 
+def preprocess_data(input_dir, target_dir, label_list):
+    """
+    Preprocess the MultiNLI dataset.
+    Args:
+        input_dir:
+        target_dir:
+        label_list:
 
-if __name__ == "__main__":
-    default_config = "../config/mnli_preprocessing.json"
+    Returns:
 
-    parser = argparse.ArgumentParser(description="Preprocess the MultiNLI dataset")
-    parser.add_argument("--config",
-                        default=default_config,
-                        help="Path to a configuration file for preprocessing MultiNLI")
-    args = parser.parse_args()
+    """
 
-    script_dir = os.path.dirname(os.path.realpath(__file__))
+    train_file, val_file, test_file = None, None, None
+    for file_ in os.listdir(input_dir):
+        if fnmatch.fnmatch(file_, '*train*.jsonl'):
+            train_file = os.path.join(input_dir, file_)
+        elif fnmatch.fnmatch(file_, '*dev_matched*.jsonl'):
+            val_file = os.path.join(input_dir, file_)
+        elif fnmatch.fnmatch(file_, '*dev_mismatched*.jsonl'):
+            test_file = os.path.join(input_dir, file_)
 
-    if args.config == default_config:
-        config_path = os.path.join(script_dir, args.config)
-    else:
-        config_path = args.config
+    multi_nli_train_df = get_dataframe(train_file, label_list)
+    __remove_incomplete_instances(multi_nli_train_df, num_labels=len(label_list))
+    multi_nli_val_df = get_dataframe(val_file, label_list)
+    __remove_incomplete_instances(multi_nli_val_df, num_labels=len(label_list))
+    multi_nli_test_df = get_dataframe(test_file, label_list)
+    __remove_incomplete_instances(multi_nli_test_df, num_labels=len(label_list))
 
-    with open(os.path.normpath(config_path), 'r') as cfg_file:
-        config = json.load(cfg_file)
+    multi_nli_train_df.to_pickle(os.path.join(target_dir, 'multi_nli_%dL_train.pkl' % len(label_list)))
+    multi_nli_val_df.to_pickle(os.path.join(target_dir, 'multi_nli_%dL_val.pkl' % len(label_list)))
+    multi_nli_test_df.to_pickle(os.path.join(target_dir, 'multi_nli_%dL_test.pkl' % len(label_list)))
 
-    preprocess_MNLI_data(
-        os.path.normpath(os.path.join(script_dir, config["data_dir"])),
-        os.path.normpath(os.path.join(script_dir, config["target_dir"])),
-        lowercase=config["lowercase"],
-        ignore_punctuation=config["ignore_punctuation"],
-        num_words=config["num_words"],
-        stopwords=config["stopwords"],
-        labeldict=config["labeldict"],
-        bos=config["bos"],
-        eos=config["eos"]
-    )
+
+def get_args():
+    parser = ArgumentParser()
+    parser.add_argument('--input_dir', type=str, default=os.path.join('../datasets/raw/multinli_1.0'),
+                        help='Path to the directory containing the MultiNLI dataset. (default: %(default)s)')
+    parser.add_argument('--target_dir', type=str, default=os.path.join('../datasets/preprocessed/multi_nli'),
+                        help='Path to the directory where the preprocessed data will be stored. (default: %(default)s)')
+    parser.add_argument('--label_list', type=str, default='neutral,entailment,contradiction',
+                        help='Comma-separated list of labels to be used for training. (default: %(default)s)')
+    return parser.parse_args()
+
+
+if __name__ == '__main__':
+    args = get_args()
+    preprocess_data(args.input_dir, args.target_dir, args.label_list.split(','))
+    sys.exit(0)
