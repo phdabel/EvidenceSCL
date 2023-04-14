@@ -1,8 +1,10 @@
+import sys
 import os
 import json
 import uuid
 import fnmatch
 import pandas as pd
+from argparse import ArgumentParser
 
 
 def get_evidence_list(rct_path, section_id=None):
@@ -130,8 +132,7 @@ def prepare_two_labeled_dataset(nli4ct_df, test=False):
     return nli4ct_instances_df, no_neg_instances_df
 
 
-def preprocess_data(input_dir=os.path.join('../datasets/raw/Complete_dataset'),
-                    target_dir=os.path.join('../datasets/preprocessed/nli4ct')):
+def preprocess_data(input_dir, target_dir):
 
     if not os.path.exists(target_dir):
         os.makedirs(target_dir)
@@ -154,5 +155,22 @@ def preprocess_data(input_dir=os.path.join('../datasets/raw/Complete_dataset'),
     invalid_nli4ct_val_df.to_pickle(os.path.join(target_dir, 'invalid_nli4ct_2L_val.pkl'))
 
 
+def get_args():
+    parser = ArgumentParser()
+    parser.add_argument('--input_dir', type=str, default=os.path.join('../datasets/raw/Complete_dataset'),
+                        help='Path to the directory containing the raw NLI4CT dataset.')
+    parser.add_argument('--target_dir', type=str, default=os.path.join('../datasets/preprocessed/nli4ct'),
+                        help='Path to the directory where the preprocessed NLI4CT dataset will be stored.')
+
+    __args = parser.parse_args()
+
+    if not os.path.exists(__args.target_dir):
+        os.makedirs(__args.target_dir)
+
+    return __args
+
+
 if __name__ == '__main__':
-    preprocess_data()
+    args = get_args()
+    preprocess_data(args.input_dir, args.target_dir)
+    sys.exit(0)

@@ -1,3 +1,4 @@
+import sys
 import os
 import argparse
 import zipfile
@@ -98,3 +99,5 @@ if __name__ == "__main__":
     print(20*"=", "Fetching the dataset:", 20*'=')
     print("Dataset name:", args.dataset)
     download_unzip(args.dataset_url, args.target_dir)
+
+    sys.exit(0)

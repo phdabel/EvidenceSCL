@@ -8,7 +8,6 @@ import json
 from data_processor import Preprocessor
 
 
-
 def preprocess_MNLI_data(inputdir,
                          targetdir,
                          lowercase=False,

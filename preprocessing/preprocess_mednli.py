@@ -1,3 +1,4 @@
+import sys
 import os
 import json
 import re
@@ -114,18 +115,16 @@ def get_args():
     parser.add_argument('--target_dir', type=str, default=os.path.join('../datasets/preprocessed/mednli'),
                         help='Path to the directory where the preprocessed MedNLI dataset will be stored.')
 
-    args = parser.parse_args()
+    __args = parser.parse_args()
 
-    if not os.path.exists(args.target_dir):
-        os.makedirs(args.target_dir)
+    if not os.path.exists(__args.target_dir):
+        os.makedirs(__args.target_dir)
 
-    return args
-
-
-def __main__():
-    args = get_args()
-    preprocess_data(args.input_dir, args.target_dir)
+    return __args
 
 
 if __name__ == '__main__':
-    __main__()
+    args = get_args()
+    preprocess_data(args.input_dir, args.target_dir)
+
+    sys.exit(0)
