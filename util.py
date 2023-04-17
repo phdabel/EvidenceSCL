@@ -1,39 +1,128 @@
 import os
-import math
-import numpy as np
+import pandas as pd
+
 import torch
 import torch.nn as nn
 from torch.utils.data import TensorDataset
-from transformers import DataProcessor, InputExample, InputFeatures
+from transformers import InputExample, InputFeatures
 from transformers.tokenization_utils import PreTrainedTokenizer
 from typing import Union, Optional, List
-import shutil
 
 
-class NLIProcessor(DataProcessor):
-    """Processor for the NLI dataset"""
+def get_dataframes(dataset, data_folder, num_classes):
+    train_df, val_df, test_df = None, None, None
+    if dataset == 'NLI4CT':
+        # NLI4CT dataset uses 2 labels even though the model has 3 classes
+        train_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', "nli4ct_2L_train.pkl" % num_classes))
+        val_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', "nli4ct_2L_val.pkl" % num_classes))
+        # pending item - add test_df
+    elif dataset == 'MEDNLI':
+        train_df = pd.read_pickle(os.path.join(data_folder, 'mednli', "mednli_%dL_train.pkl" % num_classes))
+        val_df = pd.read_pickle(os.path.join(data_folder, 'mednli', "mednli_%dL_val.pkl" % num_classes))
+        test_df = pd.read_pickle(os.path.join(data_folder, 'mednli', "mednli_%dL_test.pkl" % num_classes))
+    elif dataset == 'MultiNLI':
+        train_df = pd.read_pickle(os.path.join(data_folder, 'multi_nli',
+                                               "multi_nli_%dL_train.pkl" % num_classes))
+        val_df = pd.read_pickle(os.path.join(data_folder, 'multi_nli',
+                                             "multi_nli_%dL_val.pkl" % num_classes))
+        test_df = pd.read_pickle(os.path.join(data_folder, 'multi_nli',
+                                              "multi_nli_%dL_test.pkl" % num_classes))
+    return train_df, val_df, test_df
 
-    def __init__(self, data):
-        self.data = data
 
-    def get_examples(self):
-        examples = []
-        for i, id_ in enumerate(self.data["ids"]):
-            examples.append(InputExample(guid=str(id_),
-                                         text_a=' '.join(self.data["premises"][i]),
-                                         text_b=' '.join(self.data["hypotheses"][i]),
-                                         label=self.data["labels"][i]))
-        return examples
-    
-    def get_labels(self):
-        return ["contradiction", "entailment", "neutral"]
+def get_segment_points(feature: torch.Tensor, eos_token_id):
+    seg_beginning_1_idx = 0
+    seg_ending_idx = (feature == eos_token_id).nonzero().flatten().detach().numpy()
+    seg_ending_1_idx = seg_ending_idx[0]
+    seg_beginning_2_idx = seg_ending_idx[1]
+    seg_ending_2_idx = seg_ending_idx[2]
+
+    return seg_beginning_1_idx, seg_ending_1_idx, seg_beginning_2_idx, seg_ending_2_idx
+
+
+def get_token_type_ids(features: torch.Tensor, eos_token_id, sep_token_id, max_seq_length=128):
+    all_token_type_ids = []
+    for row, feature in enumerate(features):
+        seg_beginning_1_idx, seg_ending_1_idx, seg_beginning_2_idx, seg_ending_2_idx = get_segment_points(feature,
+                                                                                                          eos_token_id,
+                                                                                                          sep_token_id)
+        pair_attention_ = (seg_ending_1_idx - (seg_beginning_1_idx - 1)) * [0] + (
+                    seg_ending_2_idx - (seg_beginning_2_idx - 1)) * [1]
+        padding_ = (max_seq_length - len(pair_attention_)) * [0]
+
+        all_token_type_ids.append(pair_attention_ + padding_)
+
+    return torch.tensor(all_token_type_ids)
+
+
+def get_dataset_from_dataframe(dataframe, tokenizer, max_seq_length: Optional[int] = None):
+    """
+    Args:
+        dataframe:
+        tokenizer:
+        max_seq_length:
+
+    Returns: dataset, all_uuids, all_iid
+
+    """
+    if max_seq_length is None:
+        max_seq_length = tokenizer.model_max_length
+
+    class_dict = {'contradiction': 0, 'entailment': 1, 'neutral': 2}
+
+    inputs = tokenizer.batch_encode_plus([(row.premise, row.hypothesis) for _, row in dataframe.iterrows()],
+                                         add_special_tokens=True,
+                                         padding='max_length',
+                                         truncation=True,
+                                         max_length=max_seq_length,
+                                         return_token_type_ids=False,
+                                         return_attention_mask=True,
+                                         return_tensors='pt')
+
+    all_token_type_ids = get_token_type_ids(inputs['input_ids'],
+                                            tokenizer.eos_token_id,
+                                            tokenizer.sep_token_id,
+                                            max_seq_length)
+
+    labels = torch.tensor([class_dict[row.class_label] for _, row in dataframe.iterrows()], dtype=torch.long)
+    all_iid = [row.iid for _, row in dataframe.iterrows()]
+    all_uuids = [row.uuid for _, row in dataframe.iterrows()]
+    dataset = TensorDataset(inputs['input_ids'],
+                            inputs['attention_mask'],
+                            all_token_type_ids,
+                            labels)
+
+    return dataset, all_uuids, all_iid
+
+
+def save_model(model, optimizer, args, epoch, best_acc, save_file):
+    print('==> Saving...')
+    state = {
+        'args': args,
+        'models': model.state_dict(),
+        'optimizer': optimizer.state_dict(),
+        'epoch': epoch,
+        'best_acc': best_acc
+    }
+    torch.save(state, save_file)
+    del state
+
+
+def get_lr(optimizer):
+    for param_group in optimizer.param_groups:
+        return param_group['lr']
 
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
     def __init__(self, name, fmt=':f'):
         self.name = name
+        self.short_name = name.lower().replace(' ', '_')
         self.fmt = fmt
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
         self.reset()
 
     def reset(self):
@@ -48,88 +137,51 @@ class AverageMeter(object):
         self.count += n
         self.avg = self.sum / self.count
 
+    def __csv__(self):
+        sep = ';'
+        fmtstr = sep.join(['{short_name}',
+                           '{val' + self.fmt + '}'])
+        return fmtstr.format(**self.__dict__).split(sep)
+
     def __str__(self):
         fmtstr = '{name} {val' + self.fmt + '} ({avg' + self.fmt + '})'
         return fmtstr.format(**self.__dict__)
 
 
 class ProgressMeter(object):
-    def __init__(self, num_batches, meters, prefix=""):
+    def __init__(self, num_batches, meters, prefix="", logfile=""):
         self.batch_fmtstr = self._get_batch_fmtstr(num_batches)
         self.meters = meters
         self.prefix = prefix
+        self.logfile = logfile
+        self.header = False
 
     def display(self, batch):
         entries = [self.prefix + self.batch_fmtstr.format(batch)]
         entries += [str(meter) for meter in self.meters]
         print('\t'.join(entries))
 
+    def log_metrics(self, batch, sep=";"):
+        epoch = int(self.prefix[8:-1])
+        entries = dict()
+        entries['epoch'] = epoch
+        entries['batch'] = batch
+        for i, meter in enumerate(self.meters):
+            metric, value = meter.__csv__()
+            entries[metric] = float(value)
+
+        _logfile = open(self.logfile, 'a')
+        if not self.header and epoch == 0:
+            self.header = sep.join([key for key in entries.keys()]) + '\n'
+            _logfile.write(self.header)
+        content = sep.join([str(entries[key]) for key in entries.keys()]) + '\n'
+        _logfile.write(content)
+        _logfile.close()
+
     def _get_batch_fmtstr(self, num_batches):
         num_digits = len(str(num_batches // 1))
         fmt = '{:' + str(num_digits) + 'd}'
         return '[' + fmt + '/' + fmt.format(num_batches) + ']'
-
-
-def adjust_learning_rate(args, optimizer, epoch):
-    lr = args.learning_rate
-    if args.cosine:
-        eta_min = lr * (args.lr_decay_rate ** 3)
-        lr = eta_min + (lr - eta_min) * (
-                1 + math.cos(math.pi * epoch / args.epochs)) / 2
-    else:
-        steps = np.sum(epoch > np.asarray(args.lr_decay_epochs))
-        if steps > 0:
-            lr = lr * (args.lr_decay_rate ** steps)
-
-    for param_group in optimizer.param_groups:
-        param_group['lr'] = lr
-
-    return lr
-
-        
-def accuracy(output, target, topk=(1,)):
-    """Computes the accuracy over the k top predictions for the specified values of k"""
-    with torch.no_grad():
-        maxk = max(topk)
-        batch_size = target.size(0)
-        _, pred = output.topk(maxk, 1, True, True)
-        pred = pred.t()
-        correct = pred.eq(target.view(1, -1).expand_as(pred))
-        res = []
-        for k in topk:
-            correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
-            res.append(correct_k.mul_(100.0 / batch_size))
-        return res
-
-
-def warmup_learning_rate(args, epoch, batch_id, total_batches, optimizer):
-    if args.warm and epoch <= args.warm_epochs:
-        p = (batch_id + (epoch - 1) * total_batches) / \
-            (args.warm_epochs * total_batches)
-        lr = args.warmup_from + p * (args.warmup_to - args.warmup_from)
-
-        for param_group in optimizer.param_groups:
-            param_group['lr'] = lr
-
-
-
-def get_lr(optimizer):
-    for param_group in optimizer.param_groups:
-        return param_group['lr']
-
-
-def save_model(model, optimizer, opt, epoch, save_file, is_best):
-    print('==> Saving...')
-    state = {
-        'opt': opt,
-        'models': model.state_dict(),
-        'optimizer': optimizer.state_dict(),
-        'epoch': epoch,
-    }
-    torch.save(state, save_file)
-    if is_best:
-        shutil.copyfile(save_file, 'model_best.pth')
-    del state
 
 
 def convert_examples_to_features(examples: Union[List[InputExample], "tf.data.Dataset"],
