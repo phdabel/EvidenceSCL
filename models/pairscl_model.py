@@ -3,13 +3,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import CrossEntropyLoss, MSELoss
 from transformers import RobertaPreTrainedModel, RobertaModel
-from transformers import BertPreTrainedModel, BertModel
 from util import masked_softmax, weighted_sum, sort_by_seq_lens
 
 
-class BertForCL(RobertaPreTrainedModel):
+class RoBERTaForCL(RobertaPreTrainedModel):
     def __init__(self, config):
-        super(BertForCL, self).__init__(config)
+        super(RoBERTaForCL, self).__init__(config)
         # xxx 768
         self.num_labels = config.num_labels
         self.bert = RobertaModel(config)

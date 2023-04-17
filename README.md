@@ -23,8 +23,6 @@ fetch_data.py [-h] [--dataset DATASET]
 
 ## Preprocess the data
 
-
-
 ```
 preprocess_*.py [-h] [--config CONFIG]
 ```
@@ -32,25 +30,28 @@ preprocess_*.py [-h] [--config CONFIG]
 
 ## Train the encoder
 ```
-python main_supcon.py  --epoch EPOCH --batch_size BatchSize --dataset Dataset --dist-url tcp://localhost:10001 --multiprocessing-distributed --world-size 1 --rank 0 
+python train_encoder.py --model_name EvidenceSCL --dataset NLI4CT --max_seq_length 512 --batch_size 8 --gradient_accumulation_steps 64 
 ```
 
 ## Train the classifier
 ```
-python main_validate.py --dataset Dataset --ckpt pathToModel --dist-url tcp://localhost:10001 --multiprocessing-distributed --world-size 1 --rank 0
+python train_classifier.py --model_name EvidenceSCL --dataset NLI4CT --max_seq_length 512 --batch_size 8 --gradient_accumulation_steps 64 --ckpt_encoder <encoder_checkpoint_path>
 ```
 
 ## Test the model
+
 ```
-python main_test.py --dataset Dataset --gpu GPU --ckpt_bert pathToEncoder --ckpt_classifier pathToClassifier
+@todo
 ```
 
 # Reference
 If the code is used in your research, hope you can cite our paper as follows:
 ```
 @inproceedings{CorreaDias+2023,
-  author={Abel Corrêa Dias and }, 
-  title={Team INF-UFRGS at SemEval-2023 Task 7: Supervised Contrastive Learning for Pair-level Sentence Classification and Evidence Retrieval}, 
+  author={Abel Corrêa Dias and Filipe Faria Dias and Higor Moreira and Viviane P. Moreira and João Luiz Dihl Comba}, 
+  title={Team INF-UFRGS at SemEval-2023 Task 7: Supervised Contrastive Learning for Pair-level Sentence Classification and Evidence Retrieval},
+  booktitle={Proceedings of the 17th International Workshop on Semantic Evaluation (SemEval-2023)},
+  publisher={Association for Computational Linguistics},
   year={2023}
 }
   ```

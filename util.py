@@ -1,12 +1,70 @@
 import os
 import pandas as pd
+import argparse
 
 import torch
 import torch.nn as nn
-from torch.utils.data import TensorDataset
-from transformers import InputExample, InputFeatures
-from transformers.tokenization_utils import PreTrainedTokenizer
-from typing import Union, Optional, List
+from torch.utils.data import TensorDataset, DataLoader
+from typing import Optional
+
+
+def parse_option():
+    parser = argparse.ArgumentParser('argument for training')
+
+    # model and dataset
+    parser.add_argument("--max_seq_length", default=128, type=int,
+                        help="The maximum total input sequence length after tokenization. Sequences longer "
+                             "than this will be truncated, sequences shorter will be padded.")
+    parser.add_argument("--num_classes", default=3, type=int,
+                        help="The number of labels for the classifier.")
+    parser.add_argument('--model_name', type=str, default='EvidenceSCL', choices=['EvidenceSCL', 'PairSCL',
+                                                                                  'BioMedRoBERTa'],
+                        help='Model name (default: EvidenceSCL)')
+    parser.add_argument('--dataset', type=str, default='NLI4CT', choices=['NLI4CT', 'MEDNLI', 'MultiNLI'],
+                        help='Dataset name (default: NLI4CT)')
+    parser.add_argument('--data_folder', type=str, default='./datasets/preprocessed',
+                        help='Datasets base path (default: ./datasets/preprocessed)')
+    parser.add_argument('--encoder_ckpt', type=str, default=None,
+                        help='Path to the pre-trained encoder checkpoint (default: None)')
+
+    # training
+    parser.add_argument('--workers', default=2, type=int, metavar='N',
+                        help='Number of data loading workers (default: 2)')
+    parser.add_argument('--epochs', default=3, type=int, metavar='N',
+                        help='Number of total epochs to run')
+    parser.add_argument('--batch_size', type=int, default=512,
+                        help='Batch size in number of sentences per batch')
+    parser.add_argument('--learning_rate', type=float, default=3e-5,
+                        help='learning rate')
+    parser.add_argument('--weight_decay', type=float, default=0.01,
+                        help='weight decay')
+    parser.add_argument('--l1_regularization', type=float, default=0.1,
+                        help='Coefficient for L1 Regularization')
+    parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
+                        help='Number of updates steps to accumulate before performing a backward/update pass.')
+    parser.add_argument('--print_freq', type=int, default=100,
+                        help='Print frequency')
+    parser.add_argument('--save_freq', type=int, default=5,
+                        help='Save frequency')
+
+    # parameters
+    parser.add_argument('--alpha', type=float, default=1.,
+                        help='Alpha parameter for training objective (SCL vs. CE)')
+    parser.add_argument('--temp', type=float, default=0.05,
+                        help='temperature for loss function')
+    parser.add_argument('--ckpt', type=str, default=None, help="Path to the pre-trained models")
+    args = parser.parse_args()
+
+    args.model_path = './save/{}_models'.format(args.dataset)
+    args.model_name = '{}_{}L_lr_{}_w_decay_{}_bsz_{}_temp_{}'. \
+        format(args.model_name, args.num_classes, args.learning_rate,
+               args.weight_decay, args.batch_size, args.temp)
+
+    args.save_folder = os.path.join(args.model_path, args.model_name)
+    if not os.path.isdir(args.save_folder):
+        os.makedirs(args.save_folder)
+
+    return args
 
 
 def get_dataframes(dataset, data_folder, num_classes):
@@ -32,7 +90,7 @@ def get_dataframes(dataset, data_folder, num_classes):
 
 def get_segment_points(feature: torch.Tensor, eos_token_id):
     seg_beginning_1_idx = 0
-    seg_ending_idx = (feature == eos_token_id).nonzero().flatten().detach().numpy()
+    seg_ending_idx = torch.tensor(feature == eos_token_id, dtype=torch.bool).nonzero().flatten().detach().numpy()
     seg_ending_1_idx = seg_ending_idx[0]
     seg_beginning_2_idx = seg_ending_idx[1]
     seg_ending_2_idx = seg_ending_idx[2]
@@ -40,12 +98,11 @@ def get_segment_points(feature: torch.Tensor, eos_token_id):
     return seg_beginning_1_idx, seg_ending_1_idx, seg_beginning_2_idx, seg_ending_2_idx
 
 
-def get_token_type_ids(features: torch.Tensor, eos_token_id, sep_token_id, max_seq_length=128):
+def get_token_type_ids(features: torch.Tensor, eos_token_id, max_seq_length=128):
     all_token_type_ids = []
     for row, feature in enumerate(features):
         seg_beginning_1_idx, seg_ending_1_idx, seg_beginning_2_idx, seg_ending_2_idx = get_segment_points(feature,
-                                                                                                          eos_token_id,
-                                                                                                          sep_token_id)
+                                                                                                          eos_token_id)
         pair_attention_ = (seg_ending_1_idx - (seg_beginning_1_idx - 1)) * [0] + (
                     seg_ending_2_idx - (seg_beginning_2_idx - 1)) * [1]
         padding_ = (max_seq_length - len(pair_attention_)) * [0]
@@ -81,7 +138,6 @@ def get_dataset_from_dataframe(dataframe, tokenizer, max_seq_length: Optional[in
 
     all_token_type_ids = get_token_type_ids(inputs['input_ids'],
                                             tokenizer.eos_token_id,
-                                            tokenizer.sep_token_id,
                                             max_seq_length)
 
     labels = torch.tensor([class_dict[row.class_label] for _, row in dataframe.iterrows()], dtype=torch.long)
@@ -93,6 +149,25 @@ def get_dataset_from_dataframe(dataframe, tokenizer, max_seq_length: Optional[in
                             labels)
 
     return dataset, all_uuids, all_iid
+
+
+def get_dataloaders(dataset, data_folder, tokenizer, batch_size, workers, max_seq_length, num_classes):
+    # Obtain dataloaders
+    train_df, val_df, test_df = get_dataframes(dataset, data_folder, num_classes)
+    train_dataset, _, train_iids = get_dataset_from_dataframe(train_df, tokenizer, max_seq_length)
+    validate_dataset, _, validate_iids = get_dataset_from_dataframe(val_df, tokenizer, max_seq_length)
+    test_dataset, test_iids = None, None
+    if test_df is not None:
+        test_dataset, _, test_iids = get_dataset_from_dataframe(test_df, tokenizer, max_seq_length)
+
+    training_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False,
+                                 num_workers=workers, pin_memory=True)
+    validation_loader = DataLoader(validate_dataset, batch_size=batch_size, shuffle=False,
+                                   num_workers=workers, pin_memory=True)
+    test_loader = None if test_dataset is None else DataLoader(test_dataset, batch_size=batch_size, shuffle=False,
+                                                               num_workers=workers, pin_memory=True)
+
+    return training_loader, validation_loader, test_loader, train_iids, validate_iids, test_iids
 
 
 def save_model(model, optimizer, args, epoch, best_acc, save_file):
@@ -150,7 +225,7 @@ class AverageMeter(object):
 
 class ProgressMeter(object):
     def __init__(self, num_batches, meters, prefix="", logfile=""):
-        self.batch_fmtstr = self._get_batch_fmtstr(num_batches)
+        self.batch_fmtstr = ProgressMeter._get_batch_fmtstr(num_batches)
         self.meters = meters
         self.prefix = prefix
         self.logfile = logfile
@@ -178,112 +253,11 @@ class ProgressMeter(object):
         _logfile.write(content)
         _logfile.close()
 
-    def _get_batch_fmtstr(self, num_batches):
+    @staticmethod
+    def _get_batch_fmtstr(num_batches):
         num_digits = len(str(num_batches // 1))
         fmt = '{:' + str(num_digits) + 'd}'
         return '[' + fmt + '/' + fmt.format(num_batches) + ']'
-
-
-def convert_examples_to_features(examples: Union[List[InputExample], "tf.data.Dataset"],
-                                 tokenizer: PreTrainedTokenizer,
-                                 max_length: Optional[int] = None,
-                                 label_list=None,
-                                 output_mode=None):
-    if max_length is None:
-        max_length = tokenizer.model_max_length
-
-    label_map = {label: i for i, label in enumerate(label_list)}
-
-    def label_from_example(example: InputExample) -> Union[int, float, None]:
-        if example.label is None:
-            return None
-        if output_mode == 'classification':
-            return label_map[example.label]
-        elif output_mode == 'regression':
-            return float(example.label)
-        raise KeyError(output_mode)
-
-    labels = [label_from_example(example) for example in examples]
-
-    batch_encoding = tokenizer([(example.text_a, example.text_b) for example in examples],
-                               max_length=max_length,
-                               padding='max_length',
-                               truncation=True,
-                               return_token_type_ids=True)
-
-    features = []
-    for i in range(len(examples)):
-        inputs = {k: batch_encoding[k][i] for k in batch_encoding}
-
-        feature = InputFeatures(**inputs, label=labels[i])
-        features.append(feature)
-
-    return features
-
-
-def load_and_cache_examples(args, processor, tokenizer, evaluate, dataset):
-    print("begin convert data")
-    # Load data features from cache or dataset file
-    cached_features_file = os.path.join(
-        args.data_folder,
-        "cached_{}_{}_{}_{}".format(
-            evaluate,
-            args.model,
-            str(args.max_seq_length),
-            dataset
-        ),
-    )
-    if os.path.exists(cached_features_file):
-        features = torch.load(cached_features_file)
-        if evaluate == "test_match" or evaluate == "test_mismatch":
-            all_guid = torch.tensor([f.guid for f in features], dtype=torch.long)
-            all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
-            all_attention_mask = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
-            all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
-            all_labels = torch.tensor([f.label for f in features], dtype=torch.long)
-            dataset = TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids, all_labels, all_guid)
-        else:
-            # print(features[0])
-            all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
-            all_attention_mask = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
-            all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
-            all_labels = torch.tensor([f.label for f in features], dtype=torch.long)
-            dataset = TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids, all_labels)
-    else:
-        label_list = processor.get_labels()
-        if evaluate == "test_match" or evaluate == "test_mismatch":
-            examples = processor.get_examples()
-            features = convert_examples_to_features(
-                examples,
-                tokenizer,
-                max_length=args.max_seq_length,
-                label_list=label_list,
-                output_mode="classification"
-            )
-            torch.save(features, cached_features_file)
-            all_guid = torch.tensor([f.guid for f in features], dtype=torch.long)
-            all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
-            all_attention_mask = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
-            all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
-            all_labels = torch.tensor([f.label for f in features], dtype=torch.long)
-            dataset = TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids, all_labels, all_guid)
-        else:
-            examples = processor.get_examples()
-            features = convert_examples_to_features(
-                examples,
-                tokenizer,
-                max_length=args.max_seq_length,
-                label_list=label_list,
-                output_mode="classification"
-            )
-            torch.save(features, cached_features_file)
-            all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
-            all_attention_mask = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
-            all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
-            all_labels = torch.tensor([f.label for f in features], dtype=torch.long)
-            dataset = TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids, all_labels)
-    print("finish build dataset")
-    return dataset
 
 
 # Code widely inspired from:
@@ -306,7 +280,7 @@ def masked_softmax(tensor, mask):
     tensor_shape = tensor.size()
     reshaped_tensor = tensor.view(-1, tensor_shape[-1])
 
-    # Reshape the mask so it matches the size of the input tensor.
+    # Reshape the mask, so it matches the size of the input tensor.
     while mask.dim() < tensor.dim():
         mask = mask.unsqueeze(1)
     mask = mask.expand_as(tensor).contiguous().float()
@@ -336,14 +310,14 @@ def weighted_sum(tensor, weights, mask):
         A new tensor containing the result of the weighted sum after the mask
         has been applied on it.
     """
-    weighted_sum = weights.bmm(tensor)
+    __weighted_sum = weights.bmm(tensor)
 
-    while mask.dim() < weighted_sum.dim():
+    while mask.dim() < __weighted_sum.dim():
         mask = mask.unsqueeze(1)
     mask = mask.transpose(-1, -2)
-    mask = mask.expand_as(weighted_sum).contiguous().float()
+    mask = mask.expand_as(__weighted_sum).contiguous().float()
 
-    return weighted_sum * mask
+    return __weighted_sum * mask
 
 
 def sort_by_seq_lens(batch, sequences_lengths, descending=True):
