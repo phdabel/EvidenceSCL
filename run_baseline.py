@@ -146,4 +146,3 @@ if __name__ == '__main__':
                       ' from checkpoints.')
 
     main_worker(__args)
-    print(__args)
