@@ -12,7 +12,7 @@ def train(dataloader, model, criterion, optimizer, scheduler, epoch, args):
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':1.5f')
     learning = AverageMeter('Learning Rate', ':1.7f')
-    top = AverageMeter('Accuracy', ':1.2f')
+    top = AverageMeter('Accuracy', ':1.3f')
     progress = ProgressMeter(
         len(dataloader),
         [batch_time, data_time, learning, losses, top],
@@ -25,15 +25,16 @@ def train(dataloader, model, criterion, optimizer, scheduler, epoch, args):
     for idx, batch in enumerate(dataloader):
         data_time.update(time.time() - end)
         bsz = batch[0].size(0)
-        batch = tuple(t.cuda() for t in batch)
+        if torch.cuda.is_available():
+            batch = tuple(t.cuda() for t in batch)
+
         inputs = {'input_ids': batch[0],
                   'attention_mask': batch[1],
                   'labels': batch[3]}
 
         output = model(**inputs)
-        predicted_labels = output[0].view(-1, args.num_classes)
+        predicted_labels = output[1].view(-1, args.num_classes)
         true_labels = inputs['labels'].view(-1)
-
         loss = criterion(predicted_labels, true_labels)
 
         # L1 regularization
@@ -47,7 +48,6 @@ def train(dataloader, model, criterion, optimizer, scheduler, epoch, args):
 
         losses.update(loss.item(), bsz)
         loss.backward()
-
         # update metrics
         acc = accuracy_score(true_labels.cpu().numpy(), predicted_labels.argmax(1).cpu().numpy())
         top.update(acc, bsz)
@@ -72,9 +72,10 @@ def train(dataloader, model, criterion, optimizer, scheduler, epoch, args):
 def validate(dataloader, model, criterion, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
     losses = AverageMeter('Loss', ':1.5f')
+    top = AverageMeter('Accuracy', ':1.3f')
     progress = ProgressMeter(
         len(dataloader),
-        [batch_time, losses],
+        [batch_time, losses, top],
         prefix="Epoch: [{}]".format(epoch),
         logfile=os.path.join(args.save_folder, 'log_validation_' + args.model_name + '.csv'))
 
@@ -83,12 +84,16 @@ def validate(dataloader, model, criterion, epoch, args):
         end = time.time()
         for idx, batch in enumerate(dataloader):
             bsz = batch[0].size(0)
-            batch = tuple(t.cuda() for t in batch)
+
+            if torch.cuda.is_available():
+                batch = tuple(t.cuda() for t in batch)
+
             inputs = {'input_ids': batch[0],
-                      'attention_mask': batch[1]}
+                      'attention_mask': batch[1],
+                      'labels': batch[3]}
 
             output = model(**inputs)
-            predicted_labels = output[0].view(-1, args.num_classes)
+            predicted_labels = output[1].view(-1, args.num_classes)
             true_labels = batch[3].view(-1)
 
             loss = criterion(predicted_labels, true_labels)
@@ -97,6 +102,8 @@ def validate(dataloader, model, criterion, epoch, args):
                 loss /= args.gradient_accumulation_steps
 
             losses.update(loss.item(), bsz)
+            acc = accuracy_score(true_labels.cpu().numpy(), predicted_labels.argmax(1).cpu().numpy())
+            top.update(acc, bsz)
 
             batch_time.update(time.time() - end)
             end = time.time()
@@ -105,5 +112,4 @@ def validate(dataloader, model, criterion, epoch, args):
             if (idx + 1) % args.print_freq == 0:
                 progress.display(idx)
 
-        acc = accuracy_score(true_labels.cpu().numpy(), predicted_labels.argmax(1).cpu().numpy())
-    return losses.avg, torch.tensor(acc, dtype=torch.long)
+    return losses.avg, top.avg

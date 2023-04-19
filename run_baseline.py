@@ -47,6 +47,7 @@ def main_worker(args):
         print('Validation epoch {}, total time {:.2f}, loss {:.7f}'.format(epoch, (val_time2 - val_time1),
                                                                            validation_loss))
 
+        val_acc = torch.tensor(val_acc, dtype=torch.float32)
         if best_acc is None or val_acc > best_acc:
             best_acc = val_acc
             print("New best accuracy: {:.3f}".format(best_acc.item()))

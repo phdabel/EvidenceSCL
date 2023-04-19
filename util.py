@@ -20,7 +20,7 @@ def parse_option():
     parser.add_argument('--model_name', type=str, default='EvidenceSCL', choices=['EvidenceSCL', 'PairSCL',
                                                                                   'BioMedRoBERTa'],
                         help='Model name (default: EvidenceSCL)')
-    parser.add_argument('--dataset', type=str, default='NLI4CT', choices=['NLI4CT', 'MEDNLI', 'MultiNLI'],
+    parser.add_argument('--dataset', type=str, default='NLI4CT', choices=['NLI4CT', 'MEDNLI', 'MultiNLI', 'local'],
                         help='Dataset name (default: NLI4CT)')
     parser.add_argument('--data_folder', type=str, default='./datasets/preprocessed',
                         help='Datasets base path (default: ./datasets/preprocessed)')
@@ -85,12 +85,17 @@ def get_dataframes(dataset, data_folder, num_classes):
                                              "multi_nli_%dL_val.pkl" % num_classes))
         test_df = pd.read_pickle(os.path.join(data_folder, 'multi_nli',
                                               "multi_nli_%dL_test.pkl" % num_classes))
+    elif dataset == 'local':
+        train_df = pd.read_pickle(os.path.join(data_folder, 'local', "train_local.pkl"))
+        val_df = pd.read_pickle(os.path.join(data_folder, 'local', "dev_local.pkl"))
+        test_df = pd.read_pickle(os.path.join(data_folder, 'local', "test_local.pkl"))
+
     return train_df, val_df, test_df
 
 
 def get_segment_points(feature: torch.Tensor, eos_token_id):
     seg_beginning_1_idx = 0
-    seg_ending_idx = torch.tensor(feature == eos_token_id, dtype=torch.bool).nonzero().flatten().detach().numpy()
+    seg_ending_idx = (feature == eos_token_id).nonzero()
     seg_ending_1_idx = seg_ending_idx[0]
     seg_beginning_2_idx = seg_ending_idx[1]
     seg_ending_2_idx = seg_ending_idx[2]
@@ -140,9 +145,10 @@ def get_dataset_from_dataframe(dataframe, tokenizer, max_seq_length: Optional[in
                                             tokenizer.eos_token_id,
                                             max_seq_length)
 
-    labels = torch.tensor([[class_dict[row.class_label] for _, row in dataframe.iterrows()]], dtype=torch.long)
+    labels = torch.tensor([class_dict[row.class_label] for _, row in dataframe.iterrows()], dtype=torch.long)
     all_iid = [row.iid for _, row in dataframe.iterrows()]
     all_uuids = [row.uuid for _, row in dataframe.iterrows()]
+
     dataset = TensorDataset(inputs['input_ids'],
                             inputs['attention_mask'],
                             all_token_type_ids,
