@@ -27,16 +27,12 @@ def train(dataloader, model, criterion, optimizer, scheduler, epoch, args):
         bsz = batch[0].size(0)
         batch = tuple(t.cuda() for t in batch)
         inputs = {'input_ids': batch[0],
-                  'attention_mask': batch[1]}
-
-        # 'labels': batch[3]
-
-        print(batch[3].unsqueeze(1).view(-1))
+                  'attention_mask': batch[1],
+                  'labels': batch[3]}
 
         output = model(**inputs)
         predicted_labels = output[0].view(-1, args.num_classes)
-        #true_labels = inputs['labels'].view(-1)
-        true_labels = batch[3].unsqueeze(1).view(-1)
+        true_labels = inputs['labels'].view(-1)
 
         loss = criterion(predicted_labels, true_labels)
 
@@ -89,12 +85,11 @@ def validate(dataloader, model, criterion, epoch, args):
             bsz = batch[0].size(0)
             batch = tuple(t.cuda() for t in batch)
             inputs = {'input_ids': batch[0],
-                      'attention_mask': batch[1],
-                      'labels': batch[3]}
+                      'attention_mask': batch[1]}
 
             output = model(**inputs)
             predicted_labels = output[0].view(-1, args.num_classes)
-            true_labels = inputs['labels'].view(-1)
+            true_labels = batch[3].view(-1)
 
             loss = criterion(predicted_labels, true_labels)
 
