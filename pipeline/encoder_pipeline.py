@@ -1,6 +1,6 @@
 import os
 import time
-from ..util import AverageMeter, ProgressMeter, get_lr
+from pipeline.util import AverageMeter, ProgressMeter, get_lr
 
 import torch
 import torch.nn as nn

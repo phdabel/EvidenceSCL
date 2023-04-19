@@ -1,9 +1,6 @@
 import os
-import random
 import time
-import warnings
 import torch
-import torch.backends.cudnn as cudnn
 
 from util import save_model, parse_option, get_dataloaders
 
@@ -60,13 +57,4 @@ def main_worker(args):
 
 if __name__ == '__main__':
     __args = parse_option()
-
-    if __args.seed is not None:
-        random.seed(__args.seed)
-        torch.manual_seed(__args.seed)
-        cudnn.deterministic = True
-        warnings.warn('You have chosen to seed training. This will turn on the CUDNN deterministic setting, '
-                      'which can slow down your training considerably! You may see unexpected behavior when restarting'
-                      ' from checkpoints.')
-
     main_worker(__args)

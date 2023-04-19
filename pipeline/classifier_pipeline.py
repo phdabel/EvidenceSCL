@@ -4,7 +4,7 @@ import time
 import torch
 import torch.nn as nn
 
-from ..util import AverageMeter, ProgressMeter, get_lr
+from pipeline.util import AverageMeter, ProgressMeter, get_lr
 from sklearn.metrics import accuracy_score
 
 

@@ -12,17 +12,17 @@ class LinearClassifier(nn.Module):
         num_classes: The number of classes for the classifier.
 
     """
-    def __init__(self, encoder, num_classes):
+    def __init__(self, encoder, num_classes=3):
         super(LinearClassifier, self).__init__()
+        # get weights of the last layer of the encoder
+        dim_mlp = encoder.config.hidden_size
+        self.num_classes = num_classes
+        self.fc = nn.Linear(dim_mlp, num_classes)
         self.encoder = encoder
-        self.classifier = nn.Linear(encoder.config.hidden_size, num_classes)
-        self.dropout = nn.Dropout(encoder.config.hidden_dropout_prob)
-        self.init_weights()
 
     def forward(self, input_ids, attention_mask=None, labels=None):
         outputs = self.encoder(input_ids, attention_mask=attention_mask)
-        logits = self.classifier(outputs[0][:, 0, :])
-
+        logits = self.fc(outputs[0][:, 0, :])
         loss = None
         if labels is not None:
             if self.num_classes == 1:

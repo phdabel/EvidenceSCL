@@ -1,7 +1,5 @@
 import os
 import time
-import random
-import warnings
 
 import torch
 import torch.nn as nn
@@ -94,13 +92,5 @@ if __name__ == '__main__':
 
     if __args.encoder_ckpt is None or not os.path.isfile(__args.encoder_ckpt):
         raise ValueError("=> No checkpoint found at '{}'".format(__args.encoder_ckpt))
-
-    if __args.seed is not None:
-        random.seed(__args.seed)
-        torch.manual_seed(__args.seed)
-        cudnn.deterministic = True
-        warnings.warn('You have chosen to seed training. This will turn on the CUDNN deterministic setting, '
-                      'which can slow down your training considerably! You may see unexpected behavior when restarting'
-                      ' from checkpoints.')
 
     main_worker(__args)
