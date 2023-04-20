@@ -2,18 +2,17 @@ import os
 import time
 import torch
 import warnings
-warnings.filterwarnings("ignore")
-
 from util import save_model, parse_option, get_dataloaders
-
-from transformers import RobertaTokenizer, RobertaModel
-from models.linear_classifier import LinearClassifier
-
-from pipeline.biomed_roberta_baseline import train as train_roberta, validate as validate_roberta
-from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 
 from torch.optim import AdamW
 from torch.nn import CrossEntropyLoss
+from transformers import RobertaTokenizer, RobertaModel
+from models.linear_classifier import LinearClassifier
+from pipeline.biomed_roberta_baseline import train as train_roberta, validate as validate_roberta
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
+
+warnings.filterwarnings("ignore")
+
 
 def main_worker(args):
     best_acc = None
