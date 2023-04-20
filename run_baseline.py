@@ -1,6 +1,8 @@
 import os
 import time
 import torch
+import warnings
+warnings.filterwarnings("ignore")
 
 from util import save_model, parse_option, get_dataloaders
 
@@ -12,7 +14,6 @@ from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 
 from torch.optim import AdamW
 from torch.nn import CrossEntropyLoss
-
 
 def main_worker(args):
     best_acc = None
