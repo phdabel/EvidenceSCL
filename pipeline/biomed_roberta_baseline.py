@@ -47,8 +47,8 @@ def train(dataloader, model, criterion, optimizer, scheduler, epoch, args):
             loss /= args.gradient_accumulation_steps
 
         losses.update(loss.item(), bsz)
-        loss = loss.mean()
         loss.backward()
+
         # update metrics
         acc = accuracy_score(true_labels.cpu().numpy(), predicted_labels.argmax(1).cpu().numpy())
         top.update(acc, bsz)
