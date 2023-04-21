@@ -17,11 +17,11 @@ def parse_option():
                              "than this will be truncated, sequences shorter will be padded.")
     parser.add_argument("--num_classes", default=3, type=int,
                         help="The number of labels for the classifier.")
-    parser.add_argument('--model_name', type=str, default='EvidenceSCL', choices=['EvidenceSCL', 'PairSCL',
-                                                                                  'BioMedRoBERTa'],
-                        help='Model name (default: EvidenceSCL)')
-    parser.add_argument('--dataset', type=str, default='NLI4CT', choices=['NLI4CT', 'MEDNLI', 'MultiNLI', 'local'],
-                        help='Dataset name (default: NLI4CT)')
+    parser.add_argument('--model_name', type=str, default='evidencescl', choices=['evidencescl', 'pairscl',
+                                                                                  'biomed'],
+                        help='Model name (default: evidencescl)')
+    parser.add_argument('--dataset', type=str, default='nli4ct', choices=['nli4ct', 'mednli', 'multinli', 'local'],
+                        help='Dataset name (default: nli4ct)')
     parser.add_argument('--data_folder', type=str, default='./datasets/preprocessed',
                         help='Datasets base path (default: ./datasets/preprocessed)')
     parser.add_argument('--encoder_ckpt', type=str, default=None,
@@ -56,9 +56,9 @@ def parse_option():
     args = parser.parse_args()
 
     args.model_path = './save/{}_models'.format(args.dataset)
-    args.model_name = '{}_{}L_lr_{}_w_decay_{}_bsz_{}_temp_{}'. \
-        format(args.model_name, args.num_classes, args.learning_rate,
-               args.weight_decay, args.batch_size, args.temp)
+    args.model_name = '{}_{}L_len_{}_lr_{}_w_decay_{}_bsz_{}_temp_{}'. \
+        format(args.model_name, args.num_classes, args.max_seq_length,
+               args.learning_rate, args.weight_decay, args.batch_size, args.temp)
 
     args.save_folder = os.path.join(args.model_path, args.model_name)
     if not os.path.isdir(args.save_folder):
@@ -69,16 +69,16 @@ def parse_option():
 
 def get_dataframes(dataset, data_folder, num_classes):
     train_df, val_df, test_df = None, None, None
-    if dataset == 'NLI4CT':
+    if dataset == 'nli4ct':
         # NLI4CT dataset uses 2 labels even though the model has 3 classes
         train_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', "nli4ct_2L_train.pkl"))
         val_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', "nli4ct_2L_val.pkl"))
         # pending item - add test_df
-    elif dataset == 'MEDNLI':
+    elif dataset == 'mednli':
         train_df = pd.read_pickle(os.path.join(data_folder, 'mednli', "mednli_%dL_train.pkl" % num_classes))
         val_df = pd.read_pickle(os.path.join(data_folder, 'mednli', "mednli_%dL_val.pkl" % num_classes))
         test_df = pd.read_pickle(os.path.join(data_folder, 'mednli', "mednli_%dL_test.pkl" % num_classes))
-    elif dataset == 'MultiNLI':
+    elif dataset == 'multinli':
         train_df = pd.read_pickle(os.path.join(data_folder, 'multi_nli',
                                                "multi_nli_%dL_train.pkl" % num_classes))
         val_df = pd.read_pickle(os.path.join(data_folder, 'multi_nli',

@@ -11,8 +11,8 @@ from models.linear_classifier import LinearClassifier
 from pipeline.biomed_roberta_baseline import train as train_roberta, validate as validate_roberta
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 
-warnings.filterwarnings("ignore")
-
+# warnings.filterwarnings("ignore")
+__MODEL_SLUG__ = 'biomed'
 
 def main_worker(args):
     best_acc = None
@@ -58,4 +58,7 @@ def main_worker(args):
 
 if __name__ == '__main__':
     __args = parse_option()
+    if __args.model_name[0:len(__MODEL_SLUG__)] != __MODEL_SLUG__:
+        raise ValueError('Model name must be biomed')
+
     main_worker(__args)

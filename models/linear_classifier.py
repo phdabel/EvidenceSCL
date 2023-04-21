@@ -21,6 +21,16 @@ class LinearClassifier(nn.Module):
         self.encoder = encoder
 
     def forward(self, input_ids, attention_mask=None, labels=None):
+        """
+
+        Args:
+            input_ids: pair-level token ids
+            attention_mask: pair-level attention mask
+            labels: pair-level labels
+
+        Returns: tuple of loss and logits
+
+        """
         outputs = self.encoder(input_ids, attention_mask=attention_mask)
         logits = self.fc(outputs[0][:, 0, :])
         loss = None
