@@ -42,7 +42,7 @@ def get_nli4ct(filename, test=False):
 
     sections = ['Intervention', 'Eligibility', 'Results', 'Adverse Events']
 
-    ct_path = os.path.join('../datasets/raw/Complete_dataset/CT json')
+    ct_path = os.path.join(os.path.dirname(filename), 'CT json')
     with open(filename, 'r') as jsonfile:
         file_data = json.load(jsonfile)
         for iid, instance in file_data.items():
@@ -77,30 +77,32 @@ def get_nli4ct(filename, test=False):
     return pd.DataFrame(evidence_struct)
 
 
-def prepare_two_labeled_dataset(nli4ct_df, test=False):
+def __append_instance__(dict_struct, __uuid, row, test=False):
+    dict_struct['uuid'].append(__uuid)
+    dict_struct['iid'].append(row.iid)
+    dict_struct['itype'].append(row.itype)
+    dict_struct['rct'].append(row.rct)
+    dict_struct['trial'].append(row.trial)
+    dict_struct['premise'].append(row.premises)
+    dict_struct['hypothesis'].append(row.hypotheses)
+    dict_struct['order_'].append(row.order_)
+    if not test:
+        dict_struct['evidence_label'].append(row.evidence_label)
+        dict_struct['class_label'].append(row.two_labeled_class)
+    else:
+        dict_struct['evidence_label'].append(None)
+        dict_struct['class_label'].append(None)
 
-    def append_instance(df, __uuid, row, __test=False):
-        df['uuid'].append(__uuid)
-        df['iid'].append(row.iid)
-        df['itype'].append(row.itype)
-        df['rct'].append(row.rct)
-        df['trial'].append(row.trial)
-        df['premise'].append(row.premises)
-        df['hypothesis'].append(row.hypotheses)
-        df['order_'].append(row.order_)
-        if not __test:
-            df['class_label'].append(row.two_labeled_class)
-        else:
-            df['class_label'].append(None)
 
+def prepare_two_labeled_dataset(nli4ct_df):
     common_criteria = '(evidence_label == 1)'
     criteria_ = "(rct == @rct_ & evidence_section == @section_a & two_labeled_class != @label_a & order_ == @order_a)"
     query = "%s & %s" % (common_criteria, criteria_)
 
     nli4ct_instances = dict(uuid=list(), iid=list(), itype=list(), rct=list(), trial=list(), premise=list(),
-                            hypothesis=list(), order_=list(), class_label=list())
+                            hypothesis=list(), order_=list(), evidence_label=list(), class_label=list())
     no_neg_nli4ct_instances = dict(uuid=list(), iid=list(), itype=list(), rct=list(), trial=list(), premise=list(),
-                                   hypothesis=list(), order_=list(), class_label=list())
+                                   hypothesis=list(), order_=list(), evidence_label=list(), class_label=list())
 
     for iid in nli4ct_df.iid.unique():
         uuid_ = uuid.uuid1()
@@ -116,20 +118,30 @@ def prepare_two_labeled_dataset(nli4ct_df, test=False):
             neg_sample = nli4ct_df.query(query)
             if neg_sample.shape[0] == 1:
                 # if there is only one negative sample, retrieve it
-                append_instance(nli4ct_instances, uuid_, row_, __test=test)
-                append_instance(nli4ct_instances, uuid_, neg_sample.iloc[0], __test=test)
+                __append_instance__(nli4ct_instances, uuid_, row_)
+                __append_instance__(nli4ct_instances, uuid_, neg_sample.iloc[0])
             elif neg_sample.shape[0] > 1:
                 # if there are more than one we prioritize instances with the same value for the `trial`
                 # column (Primary|Secondary)
-                append_instance(nli4ct_instances, uuid_, row_, __test=test)
-                append_instance(nli4ct_instances, uuid_, neg_sample.query('trial == @row_.trial').iloc[0], __test=test)
+                __append_instance__(nli4ct_instances, uuid_, row_)
+                __append_instance__(nli4ct_instances, uuid_, neg_sample.query('trial == @row_.trial').iloc[0])
             else:
                 # otherwise we save instances with no negative samples in a separated structure
-                append_instance(no_neg_nli4ct_instances, uuid_, row_, __test=test)
+                __append_instance__(no_neg_nli4ct_instances, uuid_, row_)
 
     nli4ct_instances_df, no_neg_instances_df = [pd.DataFrame(nli4ct_instances), pd.DataFrame(no_neg_nli4ct_instances)]
     del nli4ct_instances, no_neg_nli4ct_instances
     return nli4ct_instances_df, no_neg_instances_df
+
+
+def prepare_unlabeled_testing_data(nli4ct_test_df):
+    nli4ct_instances = dict(uuid=list(), iid=list(), itype=list(), rct=list(), trial=list(), premise=list(),
+                            hypothesis=list(), order_=list(), evidence_label=list(), class_label=list())
+
+    for i, row_ in nli4ct_test_df.sort_values(by=['iid', 'rct', 'order_']).iterrows():
+        __append_instance__(nli4ct_instances, uuid.uuid1(), row_, test=True)
+
+    return pd.DataFrame(nli4ct_instances)
 
 
 def preprocess_data(input_dir, target_dir):
@@ -148,11 +160,13 @@ def preprocess_data(input_dir, target_dir):
 
     nli4ct_train_df, invalid_nli4ct_train_df = prepare_two_labeled_dataset(get_nli4ct(train_file))
     nli4ct_val_df, invalid_nli4ct_val_df = prepare_two_labeled_dataset(get_nli4ct(dev_file))
-    # nli4ct_test_df = get_nli4ct(test_file, test=True)
+    nli4ct_test_df = prepare_unlabeled_testing_data(get_nli4ct(test_file, test=True))
+
     nli4ct_train_df.to_pickle(os.path.join(target_dir, 'nli4ct_2L_train.pkl'))
     nli4ct_val_df.to_pickle(os.path.join(target_dir, 'nli4ct_2L_val.pkl'))
     invalid_nli4ct_train_df.to_pickle(os.path.join(target_dir, 'invalid_nli4ct_2L_train.pkl'))
     invalid_nli4ct_val_df.to_pickle(os.path.join(target_dir, 'invalid_nli4ct_2L_val.pkl'))
+    nli4ct_test_df.to_pickle(os.path.join(target_dir, 'nli4ct_unlabeled_test.pkl'))
 
 
 def get_args():

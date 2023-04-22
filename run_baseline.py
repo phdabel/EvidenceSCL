@@ -14,6 +14,7 @@ from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 warnings.filterwarnings("ignore")
 __MODEL_SLUG__ = 'biomed'
 
+
 def main_worker(args):
     best_acc = None
     classifier = LinearClassifier(RobertaModel.from_pretrained("allenai/biomed_roberta_base"),
@@ -31,9 +32,14 @@ def main_worker(args):
                       weight_decay=args.weight_decay)
     scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=5)
 
-    training_loader, validation_loader, test_loader, train_iids, validate_iids, test_iids = \
-        get_dataloaders(args.dataset, args.data_folder, tokenizer, args.batch_size, args.workers,
-                        args.max_seq_length, args.num_classes)
+    dataloader_struct = get_dataloaders(args.dataset, args.data_folder, tokenizer, args.batch_size, args.workers,
+                                        args.max_seq_length, args.num_classes)
+
+    training_loader = dataloader_struct['loader']['training']
+    validation_loader = dataloader_struct['loader']['validation']
+
+    # train_iids = dataloader_struct['iids']['training']
+    # validate_iids = dataloader_struct['iids']['validation']
 
     for epoch in range(args.epochs):
         time1 = time.time()

@@ -73,6 +73,7 @@ def get_dataframes(dataset, data_folder, num_classes):
         # NLI4CT dataset uses 2 labels even though the model has 3 classes
         train_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', "nli4ct_2L_train.pkl"))
         val_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', "nli4ct_2L_val.pkl"))
+        test_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', 'nli4ct_unlabeled_test.pkl'))
         # pending item - add test_df
     elif dataset == 'mednli':
         train_df = pd.read_pickle(os.path.join(data_folder, 'mednli', "mednli_%dL_train.pkl" % num_classes))
@@ -109,7 +110,7 @@ def get_token_type_ids(features: torch.Tensor, eos_token_id, max_seq_length=128)
         seg_beginning_1_idx, seg_ending_1_idx, seg_beginning_2_idx, seg_ending_2_idx = get_segment_points(feature,
                                                                                                           eos_token_id)
         pair_attention_ = (seg_ending_1_idx - (seg_beginning_1_idx - 1)) * [0] + (
-                    seg_ending_2_idx - (seg_beginning_2_idx - 1)) * [1]
+                seg_ending_2_idx - (seg_beginning_2_idx - 1)) * [1]
         padding_ = (max_seq_length - len(pair_attention_)) * [0]
 
         all_token_type_ids.append(pair_attention_ + padding_)
@@ -117,19 +118,25 @@ def get_token_type_ids(features: torch.Tensor, eos_token_id, max_seq_length=128)
     return torch.tensor(all_token_type_ids)
 
 
-def get_dataset_from_dataframe(dataframe, tokenizer, max_seq_length: Optional[int] = None):
+def get_dataset_from_dataframe(dataframe, tokenizer, max_seq_length: Optional[int] = None, test=False):
     """
     Args:
         dataframe:
         tokenizer:
         max_seq_length:
+        test:
 
-    Returns: dataset, all_uuids, all_iid
+    Returns: dataset, all_uuids, all_iid, all_trials, all_orders
+        A TensorDataset containing the input_ids, attention_mask, token_type_ids, and class and evidence labels,
+        respectively. If test is True, the dataset will not contain the class and evidence labels.
 
+        Also returns a list of generated uuids, and the original iids.
+        It may bring trials (if primary or secondary) and sentence orders.
     """
     if max_seq_length is None:
         max_seq_length = tokenizer.model_max_length
 
+    has_evidence_column = True if 'evidence_label' in dataframe.columns else False
     class_dict = {'contradiction': 0, 'entailment': 1, 'neutral': 2}
 
     inputs = tokenizer.batch_encode_plus([(row.premise, row.hypothesis) for _, row in dataframe.iterrows()],
@@ -145,35 +152,112 @@ def get_dataset_from_dataframe(dataframe, tokenizer, max_seq_length: Optional[in
                                             tokenizer.eos_token_id,
                                             max_seq_length)
 
-    labels = torch.tensor([class_dict[row.class_label] for _, row in dataframe.iterrows()], dtype=torch.long)
+    class_labels = torch.tensor([class_dict[row.class_label] for _, row in dataframe.iterrows()], dtype=torch.long) \
+        if not test else None
+
+    evidence_labels = torch.tensor([row.evidence_label for _, row in dataframe.iterrows()], dtype=torch.long) \
+        if has_evidence_column and test else None
+
     all_iid = [row.iid for _, row in dataframe.iterrows()]
     all_uuids = [row.uuid for _, row in dataframe.iterrows()]
+    all_trials = [row.trial for _, row in dataframe.iterrows()] if 'trial' in dataframe.columns else None
+    all_orders = [row.order_ for _, row in dataframe.iterrows()] if 'order_' in dataframe.columns else None
 
     dataset = TensorDataset(inputs['input_ids'],
                             inputs['attention_mask'],
                             all_token_type_ids,
-                            labels)
+                            class_labels,
+                            evidence_labels)
 
-    return dataset, all_uuids, all_iid
+    return dataset, all_uuids, all_iid, all_trials, all_orders
 
 
 def get_dataloaders(dataset, data_folder, tokenizer, batch_size, workers, max_seq_length, num_classes):
+    """
+
+    Args:
+        dataset: str
+        data_folder: str
+        tokenizer: transformers.PreTrainedTokenizer
+        batch_size: int
+        workers: int
+        max_seq_length: int
+        num_classes: int
+
+    Returns: dict
+        A dictionary containing dataloaders, iids, trials and orders for train, validation and test sets.
+    """
     # Obtain dataloaders
     train_df, val_df, test_df = get_dataframes(dataset, data_folder, num_classes)
-    train_dataset, _, train_iids = get_dataset_from_dataframe(train_df, tokenizer, max_seq_length)
-    validate_dataset, _, validate_iids = get_dataset_from_dataframe(val_df, tokenizer, max_seq_length)
-    test_dataset, test_iids = None, None
-    if test_df is not None:
-        test_dataset, _, test_iids = get_dataset_from_dataframe(test_df, tokenizer, max_seq_length)
+    train_dataset, _, train_iids, train_trials, train_orders = get_dataset_from_dataframe(train_df,
+                                                                                          tokenizer,
+                                                                                          max_seq_length)
+    validate_dataset, _, validation_iids, validation_trials, validation_orders = \
+        get_dataset_from_dataframe(val_df, tokenizer, max_seq_length)
+    test_dataset, _, test_iids, test_trials, test_orders = get_dataset_from_dataframe(test_df, tokenizer,
+                                                                                      max_seq_length, test=True)
 
     training_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False,
                                  num_workers=workers, pin_memory=True)
     validation_loader = DataLoader(validate_dataset, batch_size=batch_size, shuffle=False,
                                    num_workers=workers, pin_memory=True)
-    test_loader = None if test_dataset is None else DataLoader(test_dataset, batch_size=batch_size, shuffle=False,
-                                                               num_workers=workers, pin_memory=True)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False,
+                             num_workers=workers, pin_memory=True)
 
-    return training_loader, validation_loader, test_loader, train_iids, validate_iids, test_iids
+    return {'loader': {'training': training_loader,
+                       'validation': validation_loader,
+                       'test': test_loader},
+            'iids': {
+                'training': train_iids,
+                'validation': validation_iids,
+                'test': test_iids},
+            'trials': {
+                'training': train_trials,
+                'validation': validation_trials,
+                'test': test_trials},
+            'orders': {
+                'training': train_orders,
+                'validation': validation_orders,
+                'test': test_orders},
+            }
+
+
+def get_dataframe(data_folder, dataset_name, filename):
+    """
+
+    Args:
+        data_folder: str
+        dataset_name: str - name of the dataset [nli4ct, mednli, multinli]
+        filename: str
+
+    Returns: pd.DataFrame
+        Returns the dataframe from the given filename.
+    """
+    return pd.read_pickle(os.path.join(data_folder, dataset_name, filename))
+
+
+def get_dataloader(data_folder, dataset_name, filename, tokenizer, batch_size, workers, max_seq_length, test=False):
+    """
+
+    Args:
+        data_folder: str
+        dataset_name: str - name of the dataset [nli4ct, mednli, multinli]
+        filename: str
+        tokenizer: transformers.PreTrainedTokenizer
+        batch_size: int
+        workers: int
+        max_seq_length: int
+        test: bool
+
+    Returns: Tuple[DataLoader, List[str], List[str], List[int]]
+        Returns a dataloader from the given filename and the list of original iids, trials, and
+        the sentence order list.
+    """
+    dataset_df = get_dataframe(data_folder, dataset_name, filename)
+    dataset, _, iids, trials, orders = get_dataset_from_dataframe(dataset_df, tokenizer, max_seq_length, test)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=workers, pin_memory=True)
+
+    return dataloader, iids, trials, orders
 
 
 def save_model(model, optimizer, args, epoch, best_acc, save_file):
@@ -272,12 +356,12 @@ def sort_by_seq_lens(batch, sequences_lengths, descending=True):
             restore the order of the sequences in 'sorted_batch' so that it
             matches the input batch.
     """
-    sorted_seq_lens, sorting_index =\
+    sorted_seq_lens, sorting_index = \
         sequences_lengths.sort(0, descending=descending)
 
     sorted_batch = batch.index_select(0, sorting_index)
 
-    idx_range =\
+    idx_range = \
         sequences_lengths.new_tensor(torch.arange(0, len(sequences_lengths)))
     _, reverse_mapping = sorting_index.sort(0, descending=False)
     restoration_index = idx_range.index_select(0, reverse_mapping)
