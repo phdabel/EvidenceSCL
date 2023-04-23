@@ -24,15 +24,14 @@ def main_worker(args):
 
     if args.ckpt is not None:
         classifier_ckpt = torch.load(args.ckpt, map_location=args.device)
-        classifier_state_dict = {key[7:]: classifier_ckpt['models'][key] for key in classifier_ckpt['models'].keys()}
-        classifier.load_state_dict(classifier_state_dict)
+        # classifier_state_dict = {key[7:]: classifier_ckpt['models'][key] for key in classifier_ckpt['models'].keys()}
+        classifier.load_state_dict(classifier_ckpt["models"])
         print("=> loaded checkpoint '{}' (epoch {})".format(args.ckpt, classifier_ckpt['epoch']))
     else:
         try:
-            classifier_ckpt = torch.load(os.path.join(args.save_folder, 'classifier_best.pth'), map_location=args.device)
-            classifier_state_dict = {key[7:]: classifier_ckpt['models'][key]
-                                     for key in classifier_ckpt['models'].keys()}
-            classifier.load_state_dict(classifier_state_dict)
+            classifier_ckpt = torch.load(os.path.join(args.save_folder, 'classifier_best.pth'),
+                                         map_location=args.device)
+            classifier.load_state_dict(classifier_ckpt["models"])
             print("=> loaded checkpoint '{}' (epoch {})".format(os.path.join(args.save_folder, 'classifier_best.pth'),
                                                                 classifier_ckpt['epoch']))
         except FileNotFoundError:
