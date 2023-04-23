@@ -19,6 +19,7 @@ best_acc = None
 
 def main_worker(gpu, ngpu_per_node, args):
     global best_acc
+    best_results = None
     args.gpu = gpu
 
     if args.gpu is not None:
@@ -63,16 +64,19 @@ def main_worker(gpu, ngpu_per_node, args):
         print('Validation epoch {}, total time {:.2f}, loss {:.7f}'.format(epoch, (val_time2 - val_time1),
                                                                            validation_loss))
 
-        generate_results_file(result, args, prefixes=['dev_majority_', 'dev_at_least_one_'])
         semeval_majority_accuracy, semeval_at_least_one_accuracy = compute_real_accuracy(result)
         semeval_accuracy = max(semeval_majority_accuracy, semeval_at_least_one_accuracy)
         semeval_accuracy = torch.tensor([semeval_accuracy], dtype=torch.float32)
+
         if best_acc is None or semeval_accuracy > best_acc:
             best_acc = semeval_accuracy
+            best_results = result
             print("New best accuracy: {:.3f}".format(best_acc.item()))
             save_file = os.path.join(args.save_folder, 'classifier_best.pth')
             save_model(classifier, optimizer, args, epoch, best_acc, save_file)
         print("Best accuracy: {:.3f}".format(best_acc.item()))
+
+    generate_results_file(best_results, args, prefixes=['dev_majority_', 'dev_at_least_one_'])
 
 
 if __name__ == '__main__':
