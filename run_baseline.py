@@ -2,7 +2,7 @@ import os
 import time
 import torch
 import warnings
-from util import save_model, parse_option, get_dataloaders, compute_real_accuracy
+from util import save_model, parse_option, get_dataloaders, compute_real_accuracy, generate_results_file
 
 from torch.optim import AdamW
 from torch.nn import CrossEntropyLoss
@@ -63,8 +63,9 @@ def main_worker(gpu, ngpu_per_node, args):
         print('Validation epoch {}, total time {:.2f}, loss {:.7f}'.format(epoch, (val_time2 - val_time1),
                                                                            validation_loss))
 
-        semeval_accuracy = compute_real_accuracy(result)
-
+        generate_results_file(result, args, prefixes=['dev_majority_', 'dev_at_least_one_'])
+        semeval_majority_accuracy, semeval_at_least_one_accuracy = compute_real_accuracy(result)
+        semeval_accuracy = max(semeval_majority_accuracy, semeval_at_least_one_accuracy)
         semeval_accuracy = torch.tensor([semeval_accuracy], dtype=torch.float32)
         if best_acc is None or semeval_accuracy > best_acc:
             best_acc = semeval_accuracy

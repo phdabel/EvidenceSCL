@@ -1,5 +1,7 @@
 import os
 import json
+
+import numpy as np
 import pandas as pd
 import argparse
 
@@ -104,24 +106,35 @@ def compute_real_accuracy(results):
     results_df = pd.DataFrame(results)
     aggregated_results = results_df.groupby('iid').aggregate(list).reset_index()
     aggregated_results['majority_label'] = [mode(row.predicted_label) for _, row in aggregated_results.iterrows()]
+    aggregated_results['at_least_one'] = [int(sum(row.predicted_label) > 0) for _, row in aggregated_results.iterrows()]
     aggregated_results['gold_label'] = [mode(row.gold_label) for _, row in aggregated_results.iterrows()]
     acc = accuracy_score(aggregated_results['gold_label'], aggregated_results['majority_label'])
-    return acc
+    acc2 = accuracy_score(aggregated_results['gold_label'], aggregated_results['at_least_one'])
+    return acc, acc2
 
 
-def generate_results_file(results_dataframe, args):
+def generate_results_file(results_dataframe, args, prefixes=['majority_', 'at_least_one_']):
     reverse_class_dict = {0: 'contradiction', 1: 'entailment', 2: 'neutral'}
-    r = {}
+    majority_results = {}
+    at_least_one_results = {}
     for i, row in results_dataframe.iterrows():
-        r[row.iid] = {'Prediction': 'Contradiction' if row['majority_label'] == 0 else 'Entailment'}
+        majority_results[row.iid] = {'Prediction': 'Contradiction' if row['majority_label'] == 0 else 'Entailment'}
+        at_least_one_results[row.iid] = {'Prediction': 'Contradiction' if row['at_least_one'] == 0 else 'Entailment'}
 
-    filename = 'results.json'
+    compress_results(majority_results, args, prefix=prefixes[0])
+    compress_results(at_least_one_results, args, prefix=prefixes[1])
+
+
+def compress_results(content, args, prefix='majority_'):
+    filename = os.path.join(args.save_folder, 'results.json')
     with open(filename, "w") as json_file:
-        json_file.write(json.dumps(r, indent=4))
+        json_file.write(json.dumps(content, indent=4))
 
-    output_file = os.path.join(args.save_folder, args.model_name.replace('.', '_') + '.zip')
+    output_file = os.path.join(args.save_folder, prefix + args.model_name.replace('.', '_') + '.zip')
     with ZipFile(output_file, mode='w') as zipObj:
         zipObj.write(filename)
+
+    os.unlink(filename)
     print("Files %s and %s created." % (filename, output_file))
 
 
