@@ -60,6 +60,8 @@ def parse_option():
         format(args.model_name, args.num_classes, args.max_seq_length,
                args.learning_rate, args.weight_decay, args.batch_size, args.temp)
 
+    args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     args.save_folder = os.path.join(args.model_path, args.model_name)
     if not os.path.isdir(args.save_folder):
         os.makedirs(args.save_folder)

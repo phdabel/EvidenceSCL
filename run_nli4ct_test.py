@@ -26,20 +26,23 @@ def main_worker(args):
     if args.encoder_ckpt is not None:
         # load encoder checkpoint
         encoder_ckpt = torch.load(args.encoder_ckpt, map_location='cpu')
-        encoder_state_dict = {key[7:]: encoder_ckpt['models'][key] for key in encoder_ckpt['models'].keys()}
+        encoder_state_dict = {key[7:]: encoder_ckpt['models'][key] for key in encoder_ckpt['models'].keys()} \
+            if args.device == 'cpu' else encoder_ckpt['models']
         model.load_state_dict(encoder_state_dict)
         print("=> Loaded encoder checkpoint '{}' (epoch {})".format(args.encoder_ckpt, encoder_ckpt['epoch']))
 
     if args.ckpt is not None:
         classifier_ckpt = torch.load(args.ckpt, map_location='cpu')
-        classifier_state_dict = {key[7:]: classifier_ckpt['models'][key] for key in classifier_ckpt['models'].keys()}
+        classifier_state_dict = {key[7:]: classifier_ckpt['models'][key] for key in classifier_ckpt['models'].keys()} \
+            if args.device == 'cpu' else classifier_ckpt['models']
         classifier.load_state_dict(classifier_state_dict)
         print("=> loaded checkpoint '{}' (epoch {})".format(args.ckpt, classifier_ckpt['epoch']))
     else:
         try:
             classifier_ckpt = torch.load(os.path.join(args.save_folder, 'classifier_best.pth'), map_location='cpu')
             classifier_state_dict = {key[7:]: classifier_ckpt['models'][key]
-                                     for key in classifier_ckpt['models'].keys()}
+                                     for key in classifier_ckpt['models'].keys()} \
+                if args.device == 'cpu' else classifier_ckpt['models']
             classifier.load_state_dict(classifier_state_dict)
             print("=> loaded checkpoint '{}' (epoch {})".format(os.path.join(args.save_folder, 'classifier_best.pth'),
                                                                 classifier_ckpt['epoch']))
