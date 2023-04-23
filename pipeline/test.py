@@ -38,7 +38,7 @@ def run_test(dataloader, classifier, args, extra=None):
             inputs = {'input_ids': batch[0],
                       'attention_mask': batch[1]}
 
-            logits = classifier(inputs)
+            logits = classifier(**inputs)
             _, prediction = logits.topk(1, 1, True, True)
             res["predicted_label"] += prediction.view(-1, args.num_classes).cpu().numpy().tolist()
             res["logits"] += logits.cpu().numpy().tolist()
