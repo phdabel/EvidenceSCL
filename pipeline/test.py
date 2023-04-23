@@ -7,12 +7,11 @@ from sklearn.metrics import accuracy_score
 __NLI4CT_SLUG__ = "nli4ct"
 
 
-def run_test(dataloader, model, classifier, args, extra=None):
+def run_test(dataloader, classifier, args, extra=None):
     """
 
     Args:
         dataloader: torch.utils.data.DataLoader
-        model: transformers.RobertaModel
         classifier: models.linear_classifier.LinearClassifier
         args: argparse.ArgumentParser
         extra: tuple of (iids, trials, orders, unlabeled) if args.dataset == "nli4ct"
@@ -23,10 +22,7 @@ def run_test(dataloader, model, classifier, args, extra=None):
     batch_time = AverageMeter('Time', ':6.3f')
     top = AverageMeter('Accuracy', ':1.3f')
 
-    model.eval()
     classifier.eval()
-    model.to(args.device)
-    classifier.to(args.device)
 
     res = {"iid": [], "predicted_label": [], "trial": [], "order_": [], "gold_label": [], "predicted_evidence": [],
            "gold_evidence_label": [], "logits": []}
@@ -40,11 +36,9 @@ def run_test(dataloader, model, classifier, args, extra=None):
                 batch = tuple(t.cuda() for t in batch)
 
             inputs = {'input_ids': batch[0],
-                      'attention_mask': batch[1],
-                      'token_type_ids': batch[2]}
+                      'attention_mask': batch[1]}
 
-            features = model(**inputs)
-            logits = classifier(features.detach())
+            logits = classifier(inputs)
             _, prediction = logits.topk(1, 1, True, True)
             res["predicted_label"] += prediction.view(-1, args.num_classes).cpu().numpy().tolist()
             res["logits"] += logits.cpu().numpy().tolist()

@@ -47,6 +47,26 @@ def parse_option():
     parser.add_argument('--save_freq', type=int, default=5,
                         help='Save frequency')
 
+    # distributed training
+    parser.add_argument('--rank', type=int, default=-1,
+                        help='node rank for distributed training on gpus (default: -1)')
+    parser.add_argument('--world_size', type=int, default=-1,
+                        help='world_size for distributed training on gpus (default: -1 means using all available gpus)')
+    parser.add_argument('--dist_url', type=str, default='env://',
+                        help='url used to set up distributed training (default: env://)')
+    parser.add_argument('--dist_backend', type=str, default='nccl',
+                        help='distributed backend (default: nccl)')
+    parser.add_argument('--local_rank', type=int, default=-1,
+                        help='local rank for distributed training on gpus (default: -1)')
+    parser.add_argument('--seed', type=int, default=None,
+                        help='Random seed value (default: None)')
+    parser.add_argument('--gpu', default=None, type=int,
+                        help='GPU id to use.')
+    parser.add_argument('--multiprocessing_distributed', action='store_true', default=False,
+                        help='Use multi-processing distributed training to launch N processes per node, which has N '
+                             'gpus. This is the fastest way to use PyTorch for either single node or multi node data '
+                             'parallel training')
+
     # parameters
     parser.add_argument('--alpha', type=float, default=1.,
                         help='Alpha parameter for training objective (SCL vs. CE)')

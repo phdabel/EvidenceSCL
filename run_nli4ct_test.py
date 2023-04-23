@@ -13,22 +13,14 @@ __MODEL_SLUG__ = 'biomed'
 
 
 def main_worker(args):
-    model = RobertaModel.from_pretrained("allenai/biomed_roberta_base")
+    classifier = LinearClassifier(RobertaModel.from_pretrained("allenai/biomed_roberta_base"),
+                                  num_classes=args.num_classes)
     tokenizer = RobertaTokenizer.from_pretrained("allenai/biomed_roberta_base")
-    classifier = LinearClassifier(model, num_classes=args.num_classes)
 
     if not torch.cuda.is_available():
         print('using CPU, this will be slow')
     else:
-        model = model.to(args.device)
-        classifier = classifier.to(args.device)
-
-    if args.encoder_ckpt is not None:
-        # load encoder checkpoint
-        encoder_ckpt = torch.load(args.encoder_ckpt, map_location=args.device)
-        encoder_state_dict = {key[7:]: encoder_ckpt['models'][key] for key in encoder_ckpt['models'].keys()}
-        model.load_state_dict(encoder_state_dict)
-        print("=> Loaded encoder checkpoint '{}' (epoch {})".format(args.encoder_ckpt, encoder_ckpt['epoch']))
+        classifier = torch.nn.DataParallel(classifier).cuda()
 
     if args.ckpt is not None:
         classifier_ckpt = torch.load(args.ckpt, map_location=args.device)
@@ -55,7 +47,7 @@ def main_worker(args):
 
     # run test
     unlabeled = True
-    accuracy = test_biomed_roberta(test_loader, model, classifier, args, extra=(iids, trials, orders, unlabeled))
+    accuracy = test_biomed_roberta(test_loader, classifier, args, extra=(iids, trials, orders, unlabeled))
     if accuracy is not None:
         print("Test accuracy of the model: {:2.3}".format(accuracy))
     else:
