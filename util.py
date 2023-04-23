@@ -152,11 +152,10 @@ def get_dataset_from_dataframe(dataframe, tokenizer, max_seq_length: Optional[in
                                             tokenizer.eos_token_id,
                                             max_seq_length)
 
-    class_labels = torch.tensor([class_dict[row.class_label] for _, row in dataframe.iterrows()], dtype=torch.long) \
-        if not test else None
-
-    evidence_labels = torch.tensor([row.evidence_label for _, row in dataframe.iterrows()], dtype=torch.long) \
-        if has_evidence_column and test else None
+    class_labels = torch.tensor([class_dict[row.class_label] if not test else -1 for _, row in dataframe.iterrows()],
+                                dtype=torch.long)
+    evidence_labels = torch.tensor([row.evidence_label if has_evidence_column and not test else -1
+                                    for _, row in dataframe.iterrows()], dtype=torch.long)
 
     all_iid = [row.iid for _, row in dataframe.iterrows()]
     all_uuids = [row.uuid for _, row in dataframe.iterrows()]
