@@ -1,4 +1,5 @@
 import os
+import json
 import pandas as pd
 import argparse
 
@@ -8,6 +9,7 @@ from torch.utils.data import TensorDataset, DataLoader
 from typing import Optional
 from statistics import mode
 from sklearn.metrics import accuracy_score
+from zipfile import ZipFile
 
 
 def parse_option():
@@ -105,6 +107,22 @@ def compute_real_accuracy(results):
     aggregated_results['gold_label'] = [mode(row.gold_label) for _, row in aggregated_results.iterrows()]
     acc = accuracy_score(aggregated_results['gold_label'], aggregated_results['majority_label'])
     return acc
+
+
+def generate_results_file(results_dataframe, args):
+    reverse_class_dict = {0: 'contradiction', 1: 'entailment', 2: 'neutral'}
+    r = {}
+    for i, row in results_dataframe.iterrows():
+        r[row.iid] = {'Prediction': 'Contradiction' if row['majority_label'] == 0 else 'Entailment'}
+
+    filename = 'results.json'
+    with open(filename, "w") as json_file:
+        json_file.write(json.dumps(r, indent=4))
+
+    output_file = os.path.join(args.save_folder, args.model_name.replace('.', '_') + '.zip')
+    with ZipFile(output_file, mode='w') as zipObj:
+        zipObj.write(filename)
+    print("Files %s and %s created." % (filename, output_file))
 
 
 def get_dataframes(dataset, data_folder, num_classes):

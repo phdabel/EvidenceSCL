@@ -14,6 +14,7 @@ from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 
 warnings.filterwarnings("ignore")
 __MODEL_SLUG__ = 'biomed'
+best_acc = None
 
 
 def main_worker(gpu, ngpu_per_node, args):

@@ -1,7 +1,7 @@
 import os
 import torch
 import warnings
-from util import parse_option, get_dataloader
+from util import parse_option, get_dataloader, generate_results_file
 
 import torch.backends.cudnn as cudnn
 from transformers import RobertaTokenizer, RobertaModel
@@ -46,11 +46,13 @@ def main_worker(args):
 
     # run test
     unlabeled = True
-    accuracy = test_biomed_roberta(test_loader, classifier, args, extra=(iids, trials, orders, unlabeled))
+    results, accuracy = test_biomed_roberta(test_loader, classifier, args, extra=(iids, trials, orders, unlabeled))
+
     if accuracy is not None:
         print("Test accuracy of the model: {:2.3}".format(accuracy))
     else:
         print("Test accuracy of the model: N/A")
+        generate_results_file(results, args)
 
 
 if __name__ == '__main__':

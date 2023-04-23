@@ -62,4 +62,4 @@ def run_test(dataloader, classifier, args, extra=None):
     with open(args.save_folder + '/test_results_' + args.model_name + '.pkl', 'wb') as f:
         pickle.dump(res, f)
 
-    return top.avg if not unlabeled else None
+    return (res, top.avg) if not unlabeled else (res, None)
