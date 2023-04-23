@@ -3,6 +3,7 @@ import torch
 import warnings
 from util import parse_option, get_dataloader
 
+import torch.backends.cudnn as cudnn
 from transformers import RobertaTokenizer, RobertaModel
 from models.linear_classifier import LinearClassifier
 from pipeline.test import run_test as test_biomed_roberta
@@ -42,9 +43,12 @@ def main_worker(args):
     if not torch.cuda.is_available():
         print('using CPU, this will be slow')
     else:
+        torch.device('cuda')
         model = torch.nn.DataParallel(model).cuda()
         classifier = torch.nn.DataParallel(classifier).cuda()
 
+    cudnn.benchmark = True
+    
     # load test data
     test_loader, iids, trials, orders = get_dataloader(args.data_folder, args.dataset, "nli4ct_unlabeled_test.pkl",
                                                        tokenizer, args.batch_size, args.workers,

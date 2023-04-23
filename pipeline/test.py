@@ -33,12 +33,13 @@ def run_test(dataloader, model, classifier, args, extra=None):
         end = time.time()
         for idx, batch in enumerate(dataloader):
             bsz = batch[0].size(0)
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
             if torch.cuda.is_available():
                 batch = tuple(t.cuda() for t in batch)
 
-            inputs = {'input_ids': batch[0],
-                      'attention_mask': batch[1],
-                      'token_type_ids': batch[2]}
+            inputs = {'input_ids': batch[0].to(device),
+                      'attention_mask': batch[1].to(device),
+                      'token_type_ids': batch[2].to(device)}
 
             features = model(**inputs)
             logits = classifier(features)
