@@ -19,17 +19,20 @@ def main_worker(args):
     if args.encoder_ckpt is not None:
         # load encoder checkpoint
         encoder_ckpt = torch.load(args.encoder_ckpt, map_location='cpu')
-        model.load_state_dict(encoder_ckpt['models'])
+        encoder_state_dict = {key[7:]: encoder_ckpt['models'][key] for key in encoder_ckpt['models'].keys()}
+        model.load_state_dict(encoder_state_dict)
         print("=> Loaded encoder checkpoint '{}' (epoch {})".format(args.encoder_ckpt, encoder_ckpt['epoch']))
 
     if args.ckpt is not None:
         classifier_ckpt = torch.load(args.ckpt, map_location='cpu')
-        classifier.load_state_dict(classifier_ckpt['models'])
+        classifier_state_dict = {key[7:]: classifier_ckpt['models'][key] for key in classifier_ckpt['models'].keys()}
+        classifier.load_state_dict(classifier_state_dict)
         print("=> loaded checkpoint '{}' (epoch {})".format(args.ckpt, classifier_ckpt['epoch']))
     else:
         try:
             classifier_ckpt = torch.load(os.path.join(args.save_folder, 'classifier_best.pth'), map_location='cpu')
-            classifier.load_state_dict(classifier_ckpt['models'])
+            classifier_state_dict = {key[7:]: classifier_ckpt['models'][key] for key in classifier_ckpt['models'].keys()}
+            classifier.load_state_dict(classifier_state_dict)
             print("=> loaded checkpoint '{}' (epoch {})".format(args.ckpt, classifier_ckpt['epoch']))
         except FileNotFoundError:
             raise "No classifier checkpoint found. Please specify a checkpoint to load or ensure a classifier"
