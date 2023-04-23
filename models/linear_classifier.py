@@ -24,11 +24,13 @@ class LinearClassifier(nn.Module):
         """
 
         Args:
-            input_ids: pair-level token ids
+            input_ids: pair-level input ids
             attention_mask: pair-level attention mask
             labels: pair-level labels
 
-        Returns: tuple of loss and logits
+        Returns:
+            logits: pair-level logits for each class (if labels is not None)
+            outputs: outputs of the encoder (if labels is None)
 
         """
         outputs = self.encoder(input_ids, attention_mask=attention_mask)
