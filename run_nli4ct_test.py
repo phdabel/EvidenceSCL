@@ -31,9 +31,11 @@ def main_worker(args):
     else:
         try:
             classifier_ckpt = torch.load(os.path.join(args.save_folder, 'classifier_best.pth'), map_location='cpu')
-            classifier_state_dict = {key[7:]: classifier_ckpt['models'][key] for key in classifier_ckpt['models'].keys()}
+            classifier_state_dict = {key[7:]: classifier_ckpt['models'][key]
+                                     for key in classifier_ckpt['models'].keys()}
             classifier.load_state_dict(classifier_state_dict)
-            print("=> loaded checkpoint '{}' (epoch {})".format(args.ckpt, classifier_ckpt['epoch']))
+            print("=> loaded checkpoint '{}' (epoch {})".format(os.path.join(args.save_folder, 'classifier_best.pth'),
+                                                                classifier_ckpt['epoch']))
         except FileNotFoundError:
             raise "No classifier checkpoint found. Please specify a checkpoint to load or ensure a classifier"
 
