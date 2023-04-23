@@ -17,6 +17,12 @@ def main_worker(args):
     tokenizer = RobertaTokenizer.from_pretrained("allenai/biomed_roberta_base")
     classifier = LinearClassifier(model, num_classes=args.num_classes)
 
+    if not torch.cuda.is_available():
+        print('using CPU, this will be slow')
+    else:
+        model = torch.nn.DataParallel(model).cuda()
+        classifier = torch.nn.DataParallel(classifier).cuda()
+
     if args.encoder_ckpt is not None:
         # load encoder checkpoint
         encoder_ckpt = torch.load(args.encoder_ckpt, map_location='cpu')
@@ -40,15 +46,8 @@ def main_worker(args):
         except FileNotFoundError:
             raise "No classifier checkpoint found. Please specify a checkpoint to load or ensure a classifier"
 
-    if not torch.cuda.is_available():
-        print('using CPU, this will be slow')
-    else:
-        torch.device('cuda')
-        model = torch.nn.DataParallel(model).cuda()
-        classifier = torch.nn.DataParallel(classifier).cuda()
-
     cudnn.benchmark = True
-    
+
     # load test data
     test_loader, iids, trials, orders = get_dataloader(args.data_folder, args.dataset, "nli4ct_unlabeled_test.pkl",
                                                        tokenizer, args.batch_size, args.workers,
