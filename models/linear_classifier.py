@@ -19,6 +19,7 @@ class LinearClassifier(nn.Module):
         self.num_classes = num_classes
         self.fc = nn.Linear(dim_mlp, num_classes)
         self.encoder = encoder
+        self.dropout = nn.Dropout(p=0.1)
 
     def forward(self, input_ids, attention_mask=None, labels=None):
         """
@@ -34,7 +35,10 @@ class LinearClassifier(nn.Module):
 
         """
         outputs = self.encoder(input_ids, attention_mask=attention_mask)
-        logits = self.fc(outputs[0][:, 0, :])
+        sequence_outputs = outputs[1]
+        sequence_outputs = self.dropout(sequence_outputs)
+        logits = self.fc(sequence_outputs)
+        # logits = self.fc(outputs[0][:, 0, :])
         loss = None
         if labels is not None:
             if self.num_classes == 1:
