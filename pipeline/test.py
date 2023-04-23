@@ -25,6 +25,8 @@ def run_test(dataloader, model, classifier, args, extra=None):
 
     model.eval()
     classifier.eval()
+    model.to(args.device)
+    classifier.to(args.device)
 
     res = {"iid": [], "predicted_label": [], "trial": [], "order_": [], "gold_label": [], "predicted_evidence": [],
            "gold_evidence_label": [], "logits": []}
@@ -33,16 +35,16 @@ def run_test(dataloader, model, classifier, args, extra=None):
         end = time.time()
         for idx, batch in enumerate(dataloader):
             bsz = batch[0].size(0)
-            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
             if torch.cuda.is_available():
                 batch = tuple(t.cuda() for t in batch)
 
-            inputs = {'input_ids': batch[0].to(device),
-                      'attention_mask': batch[1].to(device),
-                      'token_type_ids': batch[2].to(device)}
+            inputs = {'input_ids': batch[0],
+                      'attention_mask': batch[1],
+                      'token_type_ids': batch[2]}
 
             features = model(**inputs)
-            logits = classifier(features)
+            logits = classifier(features.detach())
             _, prediction = logits.topk(1, 1, True, True)
             res["predicted_label"] += prediction.view(-1, args.num_classes).cpu().numpy().tolist()
             res["logits"] += logits.cpu().numpy().tolist()
