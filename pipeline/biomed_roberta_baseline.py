@@ -70,15 +70,21 @@ def train(dataloader, model, criterion, optimizer, scheduler, epoch, args):
     return losses.avg, top.avg
 
 
-def validate(dataloader, model, criterion, epoch, args):
+def validate(dataloader, model, criterion, epoch, args, extra_info=None):
     batch_time = AverageMeter('Time', ':6.3f')
     losses = AverageMeter('Loss', ':1.5f')
-    top = AverageMeter('Accuracy', ':1.3f')
+    top = AverageMeter('Accuracy', ':2.3f')
     progress = ProgressMeter(
         len(dataloader),
         [batch_time, losses, top],
         prefix="Epoch: [{}]".format(epoch),
         logfile=os.path.join(args.save_folder, 'log_validation_' + args.model_name + '.csv'))
+
+    res = {"iid": [], "predicted_label": [], "trial": [], "order_": [], "gold_label": [], "predicted_evidence": [],
+           "gold_evidence_label": []}
+
+    if extra_info is not None:
+        iid_list, trial_list, order_list = extra_info
 
     model.eval()
     with torch.no_grad():
@@ -97,6 +103,14 @@ def validate(dataloader, model, criterion, epoch, args):
             predicted_labels = output[1].view(-1, args.num_classes)
             true_labels = batch[3].view(-1)
 
+            res["predicted_label"] += predicted_labels.argmax(1).cpu().numpy().tolist()
+            res["gold_label"] += true_labels.cpu().numpy().tolist()
+            offset = idx * bsz
+            res["iid"] += iid_list[offset:offset + bsz]
+            if args.dataset == "nli4ct":
+                res["trial"] += trial_list[offset:offset + bsz]
+                res["order_"] += order_list[offset:offset + bsz]
+
             loss = criterion(predicted_labels, true_labels)
 
             if args.gradient_accumulation_steps > 1:
@@ -113,4 +127,4 @@ def validate(dataloader, model, criterion, epoch, args):
             if (idx + 1) % args.print_freq == 0:
                 progress.display(idx)
 
-    return losses.avg, top.avg
+    return losses.avg, top.avg, res

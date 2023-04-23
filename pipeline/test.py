@@ -41,7 +41,7 @@ def run_test(dataloader, classifier, args, extra=None):
             output = classifier(**inputs)
             logits = output[0].view(-1, args.num_classes)
             _, prediction = logits.topk(1, 1, True, True)
-            res["predicted_label"] += prediction.view(-1, args.num_classes).cpu().numpy().tolist()
+            res["predicted_label"] += prediction.flatten().cpu().numpy().tolist()
             res["logits"] += logits.cpu().numpy().tolist()
 
             if extra is not None and args.dataset == __NLI4CT_SLUG__:
@@ -51,7 +51,7 @@ def run_test(dataloader, classifier, args, extra=None):
                 res["order_"] += sentence_orders[offset:offset + bsz]
 
             if extra is not None and not unlabeled:
-                res["gold_label"] += batch[3].view(-1).cpu().numpy().tolist()
+                res["gold_label"] += batch[3].flatten().cpu().numpy().tolist()
                 acc = accuracy_score(res["gold_label"], res["predicted_label"])
                 top.update(acc, bsz)
 

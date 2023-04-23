@@ -2,7 +2,7 @@ import os
 import time
 import torch
 import warnings
-from util import save_model, parse_option, get_dataloaders
+from util import save_model, parse_option, get_dataloaders, compute_real_accuracy
 
 from torch.optim import AdamW
 from torch.nn import CrossEntropyLoss
@@ -44,8 +44,9 @@ def main_worker(gpu, ngpu_per_node, args):
     training_loader = dataloader_struct['loader']['training']
     validation_loader = dataloader_struct['loader']['validation']
 
-    # train_iids = dataloader_struct['iids']['training']
-    # validate_iids = dataloader_struct['iids']['validation']
+    validation_iids = dataloader_struct['iids']['validation']
+    validation_trials = dataloader_struct['trials']['validation']
+    validation_orders = dataloader_struct['orders']['validation']
 
     for epoch in range(args.epochs):
         time1 = time.time()
@@ -54,14 +55,18 @@ def main_worker(gpu, ngpu_per_node, args):
         print('Training epoch {}, total time {:.2f}, loss {:.7f}'.format(epoch, (time2 - time1), loss))
 
         val_time1 = time.time()
-        validation_loss, val_acc = validate_roberta(validation_loader, classifier, criterion, epoch, args)
+        validation_loss, val_acc, result = validate_roberta(validation_loader, classifier, criterion, epoch, args,
+                                                            extra_info=(validation_iids, validation_trials,
+                                                                        validation_orders))
         val_time2 = time.time()
         print('Validation epoch {}, total time {:.2f}, loss {:.7f}'.format(epoch, (val_time2 - val_time1),
                                                                            validation_loss))
 
-        val_acc = torch.tensor([val_acc], dtype=torch.float32)
-        if best_acc is None or val_acc > best_acc:
-            best_acc = val_acc
+        semeval_accuracy = compute_real_accuracy(result)
+
+        semeval_accuracy = torch.tensor([semeval_accuracy], dtype=torch.float32)
+        if best_acc is None or semeval_accuracy > best_acc:
+            best_acc = semeval_accuracy
             print("New best accuracy: {:.3f}".format(best_acc.item()))
             save_file = os.path.join(args.save_folder, 'classifier_best.pth')
             save_model(classifier, optimizer, args, epoch, best_acc, save_file)

@@ -6,6 +6,8 @@ import torch
 import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
 from typing import Optional
+from statistics import mode
+from sklearn.metrics import accuracy_score
 
 
 def parse_option():
@@ -87,6 +89,22 @@ def parse_option():
         os.makedirs(args.save_folder)
 
     return args
+
+
+def compute_real_accuracy(results):
+    keys_to_remove = [key for key in results.keys() if len(results[key]) == 0]
+    for key in keys_to_remove:
+        del results[key]
+
+    if 'gold_label' not in results.keys():
+        raise ValueError("gold_label not found in results")
+
+    results_df = pd.DataFrame(results)
+    aggregated_results = results_df.groupby('iid').aggregate(list).reset_index()
+    aggregated_results['majority_label'] = [mode(row.predicted_label) for _, row in aggregated_results.iterrows()]
+    aggregated_results['gold_label'] = [mode(row.gold_label) for _, row in aggregated_results.iterrows()]
+    acc = accuracy_score(aggregated_results['gold_label'], aggregated_results['majority_label'])
+    return acc
 
 
 def get_dataframes(dataset, data_folder, num_classes):
