@@ -104,13 +104,16 @@ def compute_real_accuracy(results):
         raise ValueError("gold_label not found in results")
 
     results_df = pd.DataFrame(results)
+    # remove neutral labels
+    results_df.drop([i for i, _ in results_df[results_df.predicted_label == 2].iterrows()], inplace=True)
+
     aggregated_results = results_df.groupby('iid').aggregate(list).reset_index()
     aggregated_results['majority_label'] = [mode(row.predicted_label) for _, row in aggregated_results.iterrows()]
     aggregated_results['at_least_one'] = [int(sum(row.predicted_label) > 0) for _, row in aggregated_results.iterrows()]
     aggregated_results['gold_label'] = [mode(row.gold_label) for _, row in aggregated_results.iterrows()]
     acc = accuracy_score(aggregated_results['gold_label'], aggregated_results['majority_label'])
     acc2 = accuracy_score(aggregated_results['gold_label'], aggregated_results['at_least_one'])
-    return acc, acc2
+    return acc, acc2, aggregated_results
 
 
 def generate_results_file(results_dataframe, args, prefixes=['majority_', 'at_least_one_']):
