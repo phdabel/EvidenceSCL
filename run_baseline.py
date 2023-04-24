@@ -1,3 +1,4 @@
+import sys
 import os
 import time
 import torch
@@ -137,3 +138,6 @@ if __name__ == '__main__':
         mp.spawn(main_worker, nprocs=ngpus_per_node, args=(ngpus_per_node, __args))
     else:
         main_worker(__args.gpu, __args)
+
+    print('Done!')
+    sys.exit(0)

@@ -64,6 +64,8 @@ class ProgressMeter(object):
         if not self.header and epoch == 0:
             self.header = sep.join([key for key in entries.keys()]) + '\n'
             _logfile.write(self.header)
+            self.header = True
+
         content = sep.join([str(entries[key]) for key in entries.keys()]) + '\n'
         _logfile.write(content)
         _logfile.close()
