@@ -7,6 +7,7 @@ from util import save_model, parse_option, get_dataloaders, compute_real_accurac
 from torch.optim import AdamW
 from torch.nn import CrossEntropyLoss
 from transformers import RobertaTokenizer, RobertaModel
+import torch.backends.cudnn as cudnn
 from models.linear_classifier import LinearClassifier
 from pipeline.biomed_roberta_baseline import train as train_roberta, validate as validate_roberta
 import torch.multiprocessing as mp
@@ -14,12 +15,12 @@ from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 
 warnings.filterwarnings("ignore")
 __MODEL_SLUG__ = 'biomed'
-best_acc = None
+best_val_acc = None
 
 
-def main_worker(gpu, ngpu_per_node, args):
-    global best_acc
-    best_results = None
+def main_worker(gpu, args):
+    global best_val_acc
+    best_val_results = None
     args.gpu = gpu
 
     if args.gpu is not None:
@@ -46,37 +47,66 @@ def main_worker(gpu, ngpu_per_node, args):
     training_loader = dataloader_struct['loader']['training']
     validation_loader = dataloader_struct['loader']['validation']
 
-    validation_iids = dataloader_struct['iids']['validation']
-    validation_trials = dataloader_struct['trials']['validation']
-    validation_orders = dataloader_struct['orders']['validation']
+    train_iids = dataloader_struct['iids']['training']
+    train_trials = dataloader_struct['trials']['training']
+    train_orders = dataloader_struct['orders']['training']
 
+    val_iids = dataloader_struct['iids']['validation']
+    val_trials = dataloader_struct['trials']['validation']
+    val_orders = dataloader_struct['orders']['validation']
+
+    epoch, val_semeval_acc, train_agg_results = None, None, None
     for epoch in range(args.epochs):
         time1 = time.time()
-        loss, train_acc = train_roberta(training_loader, classifier, criterion, optimizer, scheduler, epoch, args)
+        train_loss, train_acc, train_result = train_roberta(training_loader, classifier, criterion, optimizer,
+                                                            scheduler, epoch, args,
+                                                            extra_info=(train_iids, train_trials, train_orders))
         time2 = time.time()
-        print('Training epoch {}, total time {:.2f}, loss {:.7f}'.format(epoch, (time2 - time1), loss))
+        print('Training epoch {}, total time {:.2f}, loss {:.7f}'.format(epoch, (time2 - time1), train_loss))
+        train_semeval_maj_acc, train_semeval_at_least_one_acc, train_agg_results = compute_real_accuracy(train_result)
+        train_semeval_acc = max(train_semeval_maj_acc, train_semeval_at_least_one_acc)
+        train_semeval_acc = torch.tensor([train_semeval_acc], dtype=torch.float32)
 
         val_time1 = time.time()
-        validation_loss, val_acc, result = validate_roberta(validation_loader, classifier, criterion, epoch, args,
-                                                            extra_info=(validation_iids, validation_trials,
-                                                                        validation_orders))
+        val_loss, val_acc, val_result = validate_roberta(validation_loader, classifier, criterion, epoch, args,
+                                                         extra_info=(val_iids, val_trials, val_orders))
         val_time2 = time.time()
         print('Validation epoch {}, total time {:.2f}, loss {:.7f}'.format(epoch, (val_time2 - val_time1),
-                                                                           validation_loss))
+                                                                           val_loss))
 
-        semeval_majority_accuracy, semeval_at_least_one_accuracy, agg_results = compute_real_accuracy(result)
-        semeval_accuracy = max(semeval_majority_accuracy, semeval_at_least_one_accuracy)
-        semeval_accuracy = torch.tensor([semeval_accuracy], dtype=torch.float32)
+        val_semeval_maj_acc, val_semeval_at_least_one_acc, val_agg_results = compute_real_accuracy(val_result)
+        val_semeval_acc = max(val_semeval_maj_acc, val_semeval_at_least_one_acc)
+        val_semeval_acc = torch.tensor([val_semeval_acc], dtype=torch.float32)
 
-        if best_acc is None or semeval_accuracy > best_acc:
-            best_acc = semeval_accuracy
-            best_results = agg_results
-            print("New best accuracy: {:.3f}".format(best_acc.item()))
+        if best_val_acc is None or val_semeval_acc > best_val_acc:
+            best_val_acc = val_semeval_acc
+            best_val_results = val_agg_results
+            print("New best accuracy: {:.3f}".format(best_val_acc.item()))
             save_file = os.path.join(args.save_folder, 'classifier_best.pth')
-            save_model(classifier, optimizer, args, epoch, best_acc, save_file)
-        print("Best accuracy: {:.3f}".format(best_acc.item()))
+            save_model(classifier, optimizer, args, epoch, best_val_acc, save_file)
 
-    generate_results_file(best_results, args, prefixes=['dev_majority_', 'dev_at_least_one_'])
+        # display epoch summary
+        epoch_summary(args.model_name, epoch, train_semeval_acc, val_semeval_acc, best_val_acc)
+
+    # save the last model
+    save_file = os.path.join(args.save_folder, 'classifier_last.pth')
+    save_model(classifier, optimizer, args, epoch, val_semeval_acc, save_file)
+
+    generate_results_file(train_agg_results, args, prefixes=['train_majority_', 'train_at_least_one_'])
+    generate_results_file(best_val_results, args, prefixes=['val_majority_', 'val_at_least_one_'])
+
+
+def epoch_summary(model_name, epoch, training_semeval_accuracy, validation_semeval_accuracy, best_validation_accuracy):
+    """
+    Display a summary of the current epoch
+    """
+    print("=========================")
+    print("Model:               {}".format(model_name))
+    print("Epoch:               {}".format(epoch))
+    print("Training accuracy:   {:.3f}".format(training_semeval_accuracy.item()))
+    print("Validation accuracy: {:.3f}".format(validation_semeval_accuracy.item()))
+    print("Best accuracy:       {:.3f}".format(best_validation_accuracy.item()))
+    print("=========================")
 
 
 if __name__ == '__main__':
@@ -87,8 +117,8 @@ if __name__ == '__main__':
     if __args.seed is not None:
         torch.manual_seed(__args.seed)
         torch.cuda.manual_seed_all(__args.seed)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
+        cudnn.deterministic = True
+        cudnn.benchmark = False
         warnings.warn('You have chosen to seed training. This will turn on the CUDNN deterministic setting, '
                       'which can slow down your training considerably! You may see unexpected behavior when restarting '
                       'from checkpoints.')
@@ -106,4 +136,4 @@ if __name__ == '__main__':
         __args.world_size = ngpus_per_node * __args.world_size
         mp.spawn(main_worker, nprocs=ngpus_per_node, args=(ngpus_per_node, __args))
     else:
-        main_worker(__args.gpu, ngpus_per_node, __args)
+        main_worker(__args.gpu, __args)

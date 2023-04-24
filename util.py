@@ -1,7 +1,6 @@
 import os
 import json
 
-import numpy as np
 import pandas as pd
 import argparse
 
@@ -121,15 +120,15 @@ def generate_results_file(results_dataframe, args, prefixes=['majority_', 'at_le
     majority_results = {}
     at_least_one_results = {}
     for i, row in results_dataframe.iterrows():
-        majority_results[row.iid] = {'Prediction': 'Contradiction' if row['majority_label'] == 0 else 'Entailment'}
-        at_least_one_results[row.iid] = {'Prediction': 'Contradiction' if row['at_least_one'] == 0 else 'Entailment'}
+        majority_results[str(row.iid)] = {'Prediction': 'Contradiction' if row['majority_label'] == 0 else 'Entailment'}
+        at_least_one_results[str(row.iid)] = {'Prediction': 'Contradiction' if row['at_least_one'] == 0 else 'Entailment'}
 
     compress_results(majority_results, args, prefix=prefixes[0])
     compress_results(at_least_one_results, args, prefix=prefixes[1])
 
 
 def compress_results(content, args, prefix='majority_'):
-    filename = os.path.join(args.save_folder, 'results.json')
+    filename = 'results.json'
     with open(filename, "w") as json_file:
         json_file.write(json.dumps(content, indent=4))
 

@@ -1,5 +1,6 @@
 import os
 import time
+
 from pipeline.util import AverageMeter, ProgressMeter, get_lr
 from sklearn.metrics import accuracy_score
 
@@ -7,7 +8,7 @@ import torch
 import torch.nn as nn
 
 
-def train(dataloader, model, criterion, optimizer, scheduler, epoch, args):
+def train(dataloader, model, criterion, optimizer, scheduler, epoch, args, extra_info=None):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':1.5f')
@@ -18,6 +19,13 @@ def train(dataloader, model, criterion, optimizer, scheduler, epoch, args):
         [batch_time, data_time, learning, losses, top],
         prefix="Epoch: [{}]".format(epoch),
         logfile=os.path.join(args.save_folder, 'log_training_' + args.model_name + '.csv'))
+
+    res = {"iid": [], "predicted_label": [], "trial": [], "order_": [], "gold_label": [], "predicted_evidence": [],
+           "gold_evidence_label": []}
+
+    iid_list, trial_list, order_list = None, None, None
+    if extra_info is not None:
+        iid_list, trial_list, order_list = extra_info
 
     l1_criterion = nn.L1Loss()
     model.train()
@@ -35,6 +43,10 @@ def train(dataloader, model, criterion, optimizer, scheduler, epoch, args):
         output = model(**inputs)
         predicted_labels = output[1].view(-1, args.num_classes)
         true_labels = inputs['labels'].view(-1)
+
+        # add metrics to res dictionary
+        add_metrics(args.dataset, bsz, idx, iid_list, predicted_labels, true_labels, res, order_list, trial_list)
+
         loss = criterion(predicted_labels, true_labels)
 
         # L1 regularization
@@ -67,7 +79,7 @@ def train(dataloader, model, criterion, optimizer, scheduler, epoch, args):
         if (idx + 1) % args.print_freq == 0:
             progress.display(idx)
 
-    return losses.avg, top.avg
+    return losses.avg, top.avg, res
 
 
 def validate(dataloader, model, criterion, epoch, args, extra_info=None):
@@ -83,6 +95,7 @@ def validate(dataloader, model, criterion, epoch, args, extra_info=None):
     res = {"iid": [], "predicted_label": [], "trial": [], "order_": [], "gold_label": [], "predicted_evidence": [],
            "gold_evidence_label": []}
 
+    iid_list, trial_list, order_list = None, None, None
     if extra_info is not None:
         iid_list, trial_list, order_list = extra_info
 
@@ -103,13 +116,8 @@ def validate(dataloader, model, criterion, epoch, args, extra_info=None):
             predicted_labels = output[1].view(-1, args.num_classes)
             true_labels = batch[3].view(-1)
 
-            res["predicted_label"] += predicted_labels.argmax(1).cpu().numpy().tolist()
-            res["gold_label"] += true_labels.cpu().numpy().tolist()
-            offset = idx * bsz
-            res["iid"] += iid_list[offset:offset + bsz]
-            if args.dataset == "nli4ct":
-                res["trial"] += trial_list[offset:offset + bsz]
-                res["order_"] += order_list[offset:offset + bsz]
+            # add metrics to res dictionary
+            add_metrics(args.dataset, bsz, idx, iid_list, predicted_labels, true_labels, res, order_list, trial_list)
 
             loss = criterion(predicted_labels, true_labels)
 
@@ -128,3 +136,32 @@ def validate(dataloader, model, criterion, epoch, args, extra_info=None):
                 progress.display(idx)
 
     return losses.avg, top.avg, res
+
+
+def add_metrics(dataset_name, bash_size, batch_index, iid_list, predicted_labels, true_labels, res, order_list=None,
+                trial_list=None):
+    """
+    Add metrics to the res dictionary.
+
+    Args:
+        dataset_name: str
+        bash_size: int
+        batch_index: int
+        iid_list: list
+        predicted_labels: tensor. shape: (bash_size, num_classes)
+        true_labels: tensor. shape: (bash_size, )
+        res: dict
+        order_list: list
+        trial_list: list
+
+    Returns:
+
+    """
+
+    res["predicted_label"] += predicted_labels.argmax(1).cpu().numpy().tolist()
+    res["gold_label"] += true_labels.cpu().numpy().tolist()
+    offset = batch_index * bash_size
+    res["iid"] += iid_list[offset:offset + bash_size]
+    if dataset_name == "nli4ct":
+        res["trial"] += trial_list[offset:offset + bash_size]
+        res["order_"] += order_list[offset:offset + bash_size]
