@@ -1,62 +1,25 @@
 #!/bin/bash
 
-# mednli
-# max_seq_length = 128|512
-# epochs 5
-# num_classes = 2-3
-# ----------------------------------
-# learning_rate = 1e-5
-python train_baseline.py --dataset mednli --max_seq_length 128 --num_classes 3 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 1e-5
-python train_baseline.py --dataset mednli --max_seq_length 512 --num_classes 3 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 1e-5
-python train_baseline.py --dataset mednli --max_seq_length 128 --num_classes 2 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 1e-5
-python train_baseline.py --dataset mednli --max_seq_length 512 --num_classes 2 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 1e-5
-# learning_rate = 3e-5
-python train_baseline.py --dataset mednli --max_seq_length 128 --num_classes 3 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 3e-5
-python train_baseline.py --dataset mednli --max_seq_length 512 --num_classes 3 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 3e-5
-python train_baseline.py --dataset mednli --max_seq_length 128 --num_classes 2 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 3e-5
-python train_baseline.py --dataset mednli --max_seq_length 512 --num_classes 2 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 3e-5
-# learning_rate = 5e-5
-python train_baseline.py --dataset mednli --max_seq_length 128 --num_classes 3 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 5e-5
-python train_baseline.py --dataset mednli --max_seq_length 512 --num_classes 3 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 5e-5
-python train_baseline.py --dataset mednli --max_seq_length 128 --num_classes 2 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 5e-5
-python train_baseline.py --dataset mednli --max_seq_length 512 --num_classes 2 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 5e-5
 
-# multinli
-# max_seq_length = 128|512
-# num_classes = 2-3
-# ----------------------------------
-# learning_rate = 1e-5
-python train_baseline.py --dataset multinli --max_seq_length 128 --num_classes 3 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 1e-5
-python train_baseline.py --dataset multinli --max_seq_length 512 --num_classes 3 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 1e-5
-python train_baseline.py --dataset multinli --max_seq_length 128 --num_classes 2 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 1e-5
-python train_baseline.py --dataset multinli --max_seq_length 512 --num_classes 2 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 1e-5
-# learning_rate = 3e-5
-python train_baseline.py --dataset multinli --max_seq_length 128 --num_classes 3 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 3e-5
-python train_baseline.py --dataset multinli --max_seq_length 512 --num_classes 3 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 3e-5
-python train_baseline.py --dataset multinli --max_seq_length 128 --num_classes 2 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 3e-5
-python train_baseline.py --dataset multinli --max_seq_length 512 --num_classes 2 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 3e-5
-# learning_rate = 5e-5
-python train_baseline.py --dataset multinli --max_seq_length 128 --num_classes 3 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 5e-5
-python train_baseline.py --dataset multinli --max_seq_length 512 --num_classes 3 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 5e-5
-python train_baseline.py --dataset multinli --max_seq_length 128 --num_classes 2 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 5e-5
-python train_baseline.py --dataset multinli --max_seq_length 512 --num_classes 2 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 5e-5
+# run_baseline.sh <batch_size> <gradient_accumulation_steps> <epochs> <workers>
+BATCH_SIZE=${1:-8}
+GRADIENT_ACCUMULATION_STEPS=${2:-1}
+EPOCHS=${3:-5}
+WORKERS=${4:-1}
 
-# nli4ct
-# max_seq_length = 128|512
-# num_classes = 2-3
-# ----------------------------------
-# learning_rate = 1e-5
-python train_baseline.py --dataset nli4ct --max_seq_length 128 --num_classes 3 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 1e-5
-python train_baseline.py --dataset nli4ct --max_seq_length 512 --num_classes 3 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 1e-5
-python train_baseline.py --dataset nli4ct --max_seq_length 128 --num_classes 2 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 1e-5
-python train_baseline.py --dataset nli4ct --max_seq_length 512 --num_classes 2 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 1e-5
-# learning_rate = 3e-5
-python train_baseline.py --dataset nli4ct --max_seq_length 128 --num_classes 3 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 3e-5
-python train_baseline.py --dataset nli4ct --max_seq_length 512 --num_classes 3 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 3e-5
-python train_baseline.py --dataset nli4ct --max_seq_length 128 --num_classes 2 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 3e-5
-python train_baseline.py --dataset nli4ct --max_seq_length 512 --num_classes 2 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 3e-5
-# learning_rate = 5e-5
-python train_baseline.py --dataset nli4ct --max_seq_length 128 --num_classes 3 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 5e-5
-python train_baseline.py --dataset nli4ct --max_seq_length 512 --num_classes 3 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 5e-5
-python train_baseline.py --dataset nli4ct --max_seq_length 128 --num_classes 2 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 5e-5
-python train_baseline.py --dataset nli4ct --max_seq_length 512 --num_classes 2 --model_name biomed --batch_size 32 --gradient_accumulation_steps 16 --epochs 5 --workers 2 --learning_rate 5e-5
+echo "Running baseline model with batch size $BATCH_SIZE, gradient accumulation steps $GRADIENT_ACCUMULATION_STEPS, epochs $EPOCHS and workers $WORKERS"
+
+for dataset in "mednli" "multinli" "nli4ct"
+do
+  for learning_rate in 1e-5 3e-5 5e-5
+  do
+    for num_classes in 2 3
+    do
+      for max_seq_length in 128 512
+      do
+        echo "Dataset: $dataset, learning rate $learning_rate, $num_classes classes and $max_seq_length max_seq_length"
+        python train_baseline.py --dataset "$dataset" --max_seq_length "$max_seq_length" --num_classes "$num_classes" --model_name biomed --batch_size "$BATCH_SIZE" --gradient_accumulation_steps "$GRADIENT_ACCUMULATION_STEPS" --epochs "$EPOCHS"  --workers "$WORKERS" --learning_rate "$learning_rate"
+      done
+    done
+  done
+done
