@@ -51,17 +51,22 @@ def main_worker(gpu, args):
     train_iids = dataloader_struct['iids']['training']
     train_trials = dataloader_struct['trials']['training']
     train_orders = dataloader_struct['orders']['training']
+    train_genres = dataloader_struct['genres']['training']
 
     val_iids = dataloader_struct['iids']['validation']
     val_trials = dataloader_struct['trials']['validation']
     val_orders = dataloader_struct['orders']['validation']
+    val_genres = dataloader_struct['genres']['validation']
 
     epoch, val_semeval_acc, train_agg_results = None, None, None
     for epoch in range(args.epochs):
         time1 = time.time()
         train_loss, train_acc, train_result = train_roberta(training_loader, classifier, criterion, optimizer,
                                                             scheduler, epoch, args,
-                                                            extra_info=(train_iids, train_trials, train_orders))
+                                                            extra_info=(train_iids,
+                                                                        train_trials,
+                                                                        train_orders,
+                                                                        train_genres))
         time2 = time.time()
         print('Training epoch {}, total time {:.2f}, loss {:.7f}'.format(epoch, (time2 - time1), train_loss))
         train_semeval_maj_acc, train_semeval_at_least_one_acc, train_agg_results = compute_real_accuracy(train_result)
@@ -70,7 +75,10 @@ def main_worker(gpu, args):
 
         val_time1 = time.time()
         val_loss, val_acc, val_result = validate_roberta(validation_loader, classifier, criterion, epoch, args,
-                                                         extra_info=(val_iids, val_trials, val_orders))
+                                                         extra_info=(val_iids,
+                                                                     val_trials,
+                                                                     val_orders,
+                                                                     val_genres))
         val_time2 = time.time()
         print('Validation epoch {}, total time {:.2f}, loss {:.7f}'.format(epoch, (val_time2 - val_time1),
                                                                            val_loss))
@@ -87,7 +95,7 @@ def main_worker(gpu, args):
             save_model(classifier, optimizer, args, epoch, best_val_acc, save_file)
 
         # display epoch summary
-        epoch_summary(args.model_name, epoch, train_semeval_acc, val_semeval_acc, best_val_acc)
+        epoch_summary(args.model_name, epoch, train_semeval_acc.item(), val_semeval_acc.item(), best_val_acc.item())
 
     # save the last model
     save_file = os.path.join(args.save_folder, 'classifier_last.pth')
@@ -104,9 +112,9 @@ def epoch_summary(model_name, epoch, training_semeval_accuracy, validation_semev
     print("=========================")
     print("Model:               {}".format(model_name))
     print("Epoch:               {}".format(epoch))
-    print("Training accuracy:   {:.3f}".format(training_semeval_accuracy.item()))
-    print("Validation accuracy: {:.3f}".format(validation_semeval_accuracy.item()))
-    print("Best accuracy:       {:.3f}".format(best_validation_accuracy.item()))
+    print("Training accuracy:   {:.3f}".format(training_semeval_accuracy))
+    print("Validation accuracy: {:.3f}".format(validation_semeval_accuracy))
+    print("Best accuracy:       {:.3f}".format(best_validation_accuracy))
     print("=========================")
 
 

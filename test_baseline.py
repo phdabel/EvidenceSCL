@@ -1,12 +1,12 @@
 import os
 import torch
 import warnings
-from util import parse_option, get_dataloader, generate_results_file
+from util import parse_option, get_dataloaders, generate_results_file
 
 import torch.backends.cudnn as cudnn
 from transformers import RobertaTokenizer, RobertaModel
 from models.linear_classifier import LinearClassifier
-from pipeline.test import run_test as test_biomed_roberta
+from pipeline.test_pipeline import run_classifier_test as test_biomed_roberta
 
 warnings.filterwarnings("ignore")
 __MODEL_SLUG__ = 'biomed'
@@ -40,13 +40,18 @@ def main_worker(args):
     cudnn.benchmark = True
 
     # load test data
-    test_loader, iids, trials, orders = get_dataloader(args.data_folder, args.dataset, "nli4ct_unlabeled_test.pkl",
-                                                       tokenizer, args.batch_size, args.workers,
-                                                       args.max_seq_length, test=True)
+    dataloader_struct = get_dataloaders(args.dataset, args.data_folder, tokenizer, args.batch_size, args.workers,
+                                        args.max_seq_length, args.num_classes)
 
-    # run test
-    unlabeled = True
-    results, accuracy = test_biomed_roberta(test_loader, classifier, args, extra=(iids, trials, orders, unlabeled))
+    test_loader = dataloader_struct['loader']['test']
+    iids = dataloader_struct['iids']['test']
+    trials = dataloader_struct['trials']['test']
+    orders = dataloader_struct['orders']['test']
+    genres = dataloader_struct['genres']['test']
+    unlabeled = True if args.dataset == 'nli4ct' else False
+
+    results, accuracy = test_biomed_roberta(test_loader, classifier, args, extra=(iids, trials, orders, genres,
+                                                                                  unlabeled))
 
     if accuracy is not None:
         print("Test accuracy of the model: {:2.3}".format(accuracy))

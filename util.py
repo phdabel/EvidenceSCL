@@ -116,7 +116,6 @@ def compute_real_accuracy(results):
 
 
 def generate_results_file(results_dataframe, args, prefixes=['majority_', 'at_least_one_']):
-    reverse_class_dict = {0: 'contradiction', 1: 'entailment', 2: 'neutral'}
     majority_results = {}
     at_least_one_results = {}
     for i, row in results_dataframe.iterrows():
@@ -147,7 +146,6 @@ def get_dataframes(dataset, data_folder, num_classes):
         train_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', "nli4ct_2L_train.pkl"))
         val_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', "nli4ct_2L_val.pkl"))
         test_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', 'nli4ct_unlabeled_test.pkl'))
-        # pending item - add test_df
     elif dataset == 'mednli':
         train_df = pd.read_pickle(os.path.join(data_folder, 'mednli', "mednli_%dL_train.pkl" % num_classes))
         val_df = pd.read_pickle(os.path.join(data_folder, 'mednli', "mednli_%dL_val.pkl" % num_classes))
@@ -191,13 +189,13 @@ def get_token_type_ids(features: torch.Tensor, eos_token_id, max_seq_length=128)
     return torch.tensor(all_token_type_ids)
 
 
-def get_dataset_from_dataframe(dataframe, tokenizer, max_seq_length: Optional[int] = None, test=False):
+def get_dataset_from_dataframe(dataframe, tokenizer, max_seq_length: Optional[int] = None, unlabeled=False):
     """
     Args:
         dataframe:
         tokenizer:
         max_seq_length:
-        test:
+        unlabeled:
 
     Returns: dataset, all_uuids, all_iid, all_trials, all_orders
         A TensorDataset containing the input_ids, attention_mask, token_type_ids, and class and evidence labels,
@@ -225,15 +223,16 @@ def get_dataset_from_dataframe(dataframe, tokenizer, max_seq_length: Optional[in
                                             tokenizer.eos_token_id,
                                             max_seq_length)
 
-    class_labels = torch.tensor([class_dict[row.class_label] if not test else -1 for _, row in dataframe.iterrows()],
-                                dtype=torch.long)
-    evidence_labels = torch.tensor([row.evidence_label if has_evidence_column and not test else -1
+    class_labels = torch.tensor([class_dict[row.class_label] if not unlabeled else -1
+                                 for _, row in dataframe.iterrows()], dtype=torch.long)
+    evidence_labels = torch.tensor([row.evidence_label if has_evidence_column and not unlabeled else -1
                                     for _, row in dataframe.iterrows()], dtype=torch.long)
 
     all_iid = [row.iid for _, row in dataframe.iterrows()]
     all_uuids = [row.uuid for _, row in dataframe.iterrows()]
     all_trials = [row.trial for _, row in dataframe.iterrows()] if 'trial' in dataframe.columns else None
     all_orders = [row.order_ for _, row in dataframe.iterrows()] if 'order_' in dataframe.columns else None
+    all_genres = [row.genre for _, row in dataframe.iterrows()] if 'genre' in dataframe.columns else None
 
     dataset = TensorDataset(inputs['input_ids'],
                             inputs['attention_mask'],
@@ -241,7 +240,7 @@ def get_dataset_from_dataframe(dataframe, tokenizer, max_seq_length: Optional[in
                             class_labels,
                             evidence_labels)
 
-    return dataset, all_uuids, all_iid, all_trials, all_orders
+    return dataset, all_uuids, all_iid, all_trials, all_orders, all_genres
 
 
 def get_dataloaders(dataset, data_folder, tokenizer, batch_size, workers, max_seq_length, num_classes):
@@ -257,17 +256,18 @@ def get_dataloaders(dataset, data_folder, tokenizer, batch_size, workers, max_se
         num_classes: int
 
     Returns: dict
-        A dictionary containing dataloaders, iids, trials and orders for train, validation and test sets.
+        A dictionary containing dataloaders, iids, trials, orders, and genres for train, validation and test sets.
     """
     # Obtain dataloaders
     train_df, val_df, test_df = get_dataframes(dataset, data_folder, num_classes)
-    train_dataset, _, train_iids, train_trials, train_orders = get_dataset_from_dataframe(train_df,
-                                                                                          tokenizer,
-                                                                                          max_seq_length)
-    validate_dataset, _, validation_iids, validation_trials, validation_orders = \
+    train_dataset, _, train_iids, train_trials, train_orders, train_genres = get_dataset_from_dataframe(train_df,
+                                                                                                        tokenizer,
+                                                                                                        max_seq_length)
+    validate_dataset, _, validation_iids, validation_trials, validation_orders, validation_genres = \
         get_dataset_from_dataframe(val_df, tokenizer, max_seq_length)
-    test_dataset, _, test_iids, test_trials, test_orders = get_dataset_from_dataframe(test_df, tokenizer,
-                                                                                      max_seq_length, test=True)
+
+    test_dataset, _, test_iids, test_trials, test_orders, test_genres = \
+        get_dataset_from_dataframe(test_df, tokenizer, max_seq_length, unlabeled=dataset == 'nli4ct')
 
     training_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False,
                                  num_workers=workers, pin_memory=True)
@@ -291,6 +291,10 @@ def get_dataloaders(dataset, data_folder, tokenizer, batch_size, workers, max_se
                 'training': train_orders,
                 'validation': validation_orders,
                 'test': test_orders},
+            'genres': {
+                'training': train_genres,
+                'validation': validation_genres,
+                'test': test_genres}
             }
 
 
@@ -308,7 +312,8 @@ def get_dataframe(data_folder, dataset_name, filename):
     return pd.read_pickle(os.path.join(data_folder, dataset_name, filename))
 
 
-def get_dataloader(data_folder, dataset_name, filename, tokenizer, batch_size, workers, max_seq_length, test=False):
+def get_dataloader(data_folder, dataset_name, filename, tokenizer, batch_size, workers, max_seq_length,
+                   unlabeled=False):
     """
 
     Args:
@@ -319,17 +324,17 @@ def get_dataloader(data_folder, dataset_name, filename, tokenizer, batch_size, w
         batch_size: int
         workers: int
         max_seq_length: int
-        test: bool
+        unlabeled: bool
 
     Returns: Tuple[DataLoader, List[str], List[str], List[int]]
         Returns a dataloader from the given filename and the list of original iids, trials, and
         the sentence order list.
     """
     dataset_df = get_dataframe(data_folder, dataset_name, filename)
-    dataset, _, iids, trials, orders = get_dataset_from_dataframe(dataset_df, tokenizer, max_seq_length, test)
+    dataset, _, iids, trials, orders, genres = get_dataset_from_dataframe(dataset_df, tokenizer, max_seq_length, unlabeled)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=workers, pin_memory=True)
 
-    return dataloader, iids, trials, orders
+    return dataloader, iids, trials, orders, genres
 
 
 def save_model(model, optimizer, args, epoch, best_acc, save_file):

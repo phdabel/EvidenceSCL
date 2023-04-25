@@ -1,13 +1,13 @@
 import time
 import pickle
 import torch
-from .util import AverageMeter
+from .util import AverageMeter, ProgressMeter, add_metrics, create_metrics_dict
 from sklearn.metrics import accuracy_score
 
 __NLI4CT_SLUG__ = "nli4ct"
 
 
-def run_test(dataloader, classifier, args, extra=None):
+def run_classifier_test(dataloader, classifier, args, extra=None):
     """
 
     Args:
@@ -18,22 +18,21 @@ def run_test(dataloader, classifier, args, extra=None):
 
     Returns:
     """
-    iids, trials, sentence_orders, unlabeled = extra
+    iids, trials, sentence_orders, genre_list, unlabeled = extra
     batch_time = AverageMeter('Time', ':6.3f')
     top = AverageMeter('Accuracy', ':1.3f')
+    progress = ProgressMeter(
+        len(dataloader),
+        [batch_time, top])
 
     classifier.eval()
-
-    res = {"iid": [], "predicted_label": [], "trial": [], "order_": [], "gold_label": [], "predicted_evidence": [],
-           "gold_evidence_label": [], "logits": []}
+    res = create_metrics_dict()
 
     with torch.no_grad():
         end = time.time()
         for idx, batch in enumerate(dataloader):
             bsz = batch[0].size(0)
-
-            if torch.cuda.is_available():
-                batch = tuple(t.cuda() for t in batch)
+            batch = tuple(t.cuda() for t in batch) if torch.cuda.is_available() else batch
 
             inputs = {'input_ids': batch[0],
                       'attention_mask': batch[1]}
@@ -41,22 +40,24 @@ def run_test(dataloader, classifier, args, extra=None):
             output = classifier(**inputs)
             logits = output[0].view(-1, args.num_classes)
             _, prediction = logits.topk(1, 1, True, True)
-            res["predicted_label"] += prediction.flatten().cpu().numpy().tolist()
-            res["logits"] += logits.cpu().numpy().tolist()
 
-            if extra is not None and args.dataset == __NLI4CT_SLUG__:
-                offset = idx * bsz
-                res["iid"] += iids[offset:offset + bsz]
-                res["trial"] += trials[offset:offset + bsz]
-                res["order_"] += sentence_orders[offset:offset + bsz]
+            predicted_labels = prediction.view(-1, args.num_classes)
+            true_labels = None if unlabeled else batch[3].view(-1)
+
+            # add metrics to res dictionary
+
+            add_metrics(args.dataset, bsz, idx, iids, predicted_labels, true_labels, res, logits, sentence_orders,
+                        trials, genre_list, unlabeled=unlabeled)
 
             if extra is not None and not unlabeled:
-                res["gold_label"] += batch[3].flatten().cpu().numpy().tolist()
-                acc = accuracy_score(res["gold_label"], res["predicted_label"])
+                acc = accuracy_score(true_labels.cpu().numpy(), predicted_labels.argmax(1).cpu().numpy())
                 top.update(acc, bsz)
 
             batch_time.update(time.time() - end)
             end = time.time()
+
+            if (idx + 1) % args.print_freq == 0:
+                progress.display(idx)
 
     # save results in pickle file
     with open(args.save_folder + '/test_results_' + args.model_name + '.pkl', 'wb') as f:

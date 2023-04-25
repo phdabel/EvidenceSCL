@@ -3,6 +3,7 @@ import time
 
 from pipeline.util import AverageMeter, ProgressMeter, get_lr
 from sklearn.metrics import accuracy_score
+from .util import add_metrics, create_metrics_dict
 
 import torch
 import torch.nn as nn
@@ -20,12 +21,11 @@ def train(dataloader, model, criterion, optimizer, scheduler, epoch, args, extra
         prefix="Epoch: [{}]".format(epoch),
         logfile=os.path.join(args.save_folder, 'log_training_' + args.model_name + '.csv'))
 
-    res = {"iid": [], "predicted_label": [], "trial": [], "order_": [], "gold_label": [], "predicted_evidence": [],
-           "gold_evidence_label": []}
+    res = create_metrics_dict()
 
-    iid_list, trial_list, order_list = None, None, None
+    iid_list, trial_list, order_list, genre_list = None, None, None, None
     if extra_info is not None:
-        iid_list, trial_list, order_list = extra_info
+        iid_list, trial_list, order_list, genre_list = extra_info
 
     l1_criterion = nn.L1Loss()
     model.train()
@@ -33,8 +33,7 @@ def train(dataloader, model, criterion, optimizer, scheduler, epoch, args, extra
     for idx, batch in enumerate(dataloader):
         data_time.update(time.time() - end)
         bsz = batch[0].size(0)
-        if torch.cuda.is_available():
-            batch = tuple(t.cuda() for t in batch)
+        batch = tuple(t.cuda() for t in batch) if torch.cuda.is_available() else batch
 
         inputs = {'input_ids': batch[0],
                   'attention_mask': batch[1],
@@ -45,10 +44,10 @@ def train(dataloader, model, criterion, optimizer, scheduler, epoch, args, extra
         true_labels = inputs['labels'].view(-1)
 
         # add metrics to res dictionary
-        add_metrics(args.dataset, bsz, idx, iid_list, predicted_labels, true_labels, res, order_list, trial_list)
+        add_metrics(args.dataset, bsz, idx, iid_list, predicted_labels, true_labels, res, None, order_list,  trial_list,
+                    genre_list)
 
         loss = criterion(predicted_labels, true_labels)
-
         # L1 regularization
         if args.l1_regularization > 0:
             for param in model.parameters():
@@ -92,12 +91,11 @@ def validate(dataloader, model, criterion, epoch, args, extra_info=None):
         prefix="Epoch: [{}]".format(epoch),
         logfile=os.path.join(args.save_folder, 'log_validation_' + args.model_name + '.csv'))
 
-    res = {"iid": [], "predicted_label": [], "trial": [], "order_": [], "gold_label": [], "predicted_evidence": [],
-           "gold_evidence_label": []}
+    res = create_metrics_dict()
 
-    iid_list, trial_list, order_list = None, None, None
+    iid_list, trial_list, order_list, genre_list = None, None, None, None
     if extra_info is not None:
-        iid_list, trial_list, order_list = extra_info
+        iid_list, trial_list, order_list, genre_list = extra_info
 
     model.eval()
     with torch.no_grad():
@@ -117,7 +115,8 @@ def validate(dataloader, model, criterion, epoch, args, extra_info=None):
             true_labels = batch[3].view(-1)
 
             # add metrics to res dictionary
-            add_metrics(args.dataset, bsz, idx, iid_list, predicted_labels, true_labels, res, order_list, trial_list)
+            add_metrics(args.dataset, bsz, idx, iid_list, predicted_labels, true_labels, res, None, order_list,
+                        trial_list, genre_list)
 
             loss = criterion(predicted_labels, true_labels)
 
@@ -136,32 +135,3 @@ def validate(dataloader, model, criterion, epoch, args, extra_info=None):
                 progress.display(idx)
 
     return losses.avg, top.avg, res
-
-
-def add_metrics(dataset_name, bash_size, batch_index, iid_list, predicted_labels, true_labels, res, order_list=None,
-                trial_list=None):
-    """
-    Add metrics to the res dictionary.
-
-    Args:
-        dataset_name: str
-        bash_size: int
-        batch_index: int
-        iid_list: list
-        predicted_labels: tensor. shape: (bash_size, num_classes)
-        true_labels: tensor. shape: (bash_size, )
-        res: dict
-        order_list: list
-        trial_list: list
-
-    Returns:
-
-    """
-
-    res["predicted_label"] += predicted_labels.argmax(1).cpu().numpy().tolist()
-    res["gold_label"] += true_labels.cpu().numpy().tolist()
-    offset = batch_index * bash_size
-    res["iid"] += iid_list[offset:offset + bash_size]
-    if dataset_name == "nli4ct":
-        res["trial"] += trial_list[offset:offset + bash_size]
-        res["order_"] += order_list[offset:offset + bash_size]

@@ -75,3 +75,52 @@ class ProgressMeter(object):
         num_digits = len(str(num_batches // 1))
         fmt = '{:' + str(num_digits) + 'd}'
         return '[' + fmt + '/' + fmt.format(num_batches) + ']'
+
+
+def create_metrics_dict():
+    return {"iid": [],
+            "predicted_label": [],
+            "trial": [],
+            "genre": [],
+            "order_": [],
+            "gold_label": [],
+            "predicted_evidence": [],
+            "gold_evidence_label": [],
+            "logits": []}.copy()
+
+
+def add_metrics(dataset_name, bash_size, batch_index, iid_list, predicted_labels, true_labels, res, logits=None,
+                order_list=None, trial_list=None, genres_list=None, unlabeled=False):
+    """
+    Add metrics to the res dictionary.
+
+    Args:
+        genres_list:
+        logits:
+        dataset_name: str
+        bash_size: int
+        batch_index: int
+        iid_list: list
+        predicted_labels: tensor. shape: (bash_size, num_classes)
+        true_labels: tensor. shape: (bash_size, )
+        res: dict
+        order_list: list
+        trial_list: list
+        unlabeled: bool
+
+    Returns:
+    """
+    res["predicted_label"] += predicted_labels.argmax(1).cpu().numpy().tolist()
+    if not unlabeled:
+        res["gold_label"] += true_labels.cpu().numpy().tolist()
+
+    if logits is not None:
+        res["logits"] += logits.cpu().numpy().tolist()
+
+    offset = batch_index * bash_size
+    res["iid"] += iid_list[offset:offset + bash_size]
+    if dataset_name == "nli4ct":
+        res["trial"] += trial_list[offset:offset + bash_size]
+        res["order_"] += order_list[offset:offset + bash_size]
+    elif dataset_name == 'multinli':
+        res["genre"] += genres_list[offset:offset + bash_size]
