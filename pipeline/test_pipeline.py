@@ -41,7 +41,7 @@ def run_classifier_test(dataloader, classifier, args, extra=None):
             logits = output[0].view(-1, args.num_classes)
             _, prediction = logits.topk(1, 1, True, True)
 
-            predicted_labels = prediction.view(-1, args.num_classes)
+            predicted_labels = logits
             true_labels = None if unlabeled else batch[3].view(-1)
 
             # add metrics to res dictionary

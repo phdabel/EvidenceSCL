@@ -1,3 +1,4 @@
+import sys
 import os
 import torch
 import warnings
@@ -66,3 +67,6 @@ if __name__ == '__main__':
         raise ValueError('Model name must be biomed')
 
     main_worker(__args)
+
+    print("Done!")
+    sys.exit(0)
