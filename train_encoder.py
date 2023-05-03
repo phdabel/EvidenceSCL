@@ -19,7 +19,7 @@ from torch.nn import CrossEntropyLoss
 
 
 def main_worker(args):
-
+    
     model = PairSupConBert(RoBERTaForCL.from_pretrained(
         "allenai/biomed_roberta_base",  # Use the 12-layer Biomed Roberta models from allenai, with a cased vocab.
         num_labels=args.max_seq_length,
