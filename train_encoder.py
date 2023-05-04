@@ -2,6 +2,7 @@ import sys
 import os
 import time
 import warnings
+import pickle
 
 from transformers import RobertaTokenizer
 import torch
@@ -13,7 +14,7 @@ import torch.utils.data
 import torch.utils.data.distributed
 from torch.optim import AdamW
 
-from util import save_model, parse_option, get_dataloaders, epoch_summary
+from util import save_model, parse_option, get_dataloaders, epoch_summary, compute_real_accuracy, generate_results_file
 from pipeline.encoder_pipeline import train as train_encoder, validate as validate_encoder
 
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
@@ -96,39 +97,54 @@ def main_worker(gpu, args):
     for epoch in range(args.start_epoch, args.epochs):
         time1 = time.time()
 
-        train_loss, train_res = train_encoder(training_loader, model, criterion_scl, criterion_ce, optimizer,
-                                              scheduler, epoch, args, extra_info=(train_iids,
-                                                                                  train_trials,
-                                                                                  train_orders,
-                                                                                  train_genres))
+        train_loss, train_acc, train_res = train_encoder(training_loader, model, criterion_scl, criterion_ce, optimizer,
+                                                         scheduler, epoch, args, extra_info=(train_iids,
+                                                                                             train_trials,
+                                                                                             train_orders,
+                                                                                             train_genres))
         time2 = time.time()
         print('epoch {}, total time {:.2f}, loss {:.7f}'.format(epoch, (time2 - time1), train_loss))
         train_loss = torch.tensor([train_loss], dtype=torch.float32)
+        train_semeval_maj_acc, train_semeval_at_least_one_acc, train_agg_results = compute_real_accuracy(train_res)
+        train_semeval_acc = max(train_semeval_maj_acc, train_semeval_at_least_one_acc)
 
         # evaluate on validation set
         val_time1 = time.time()
-        val_loss, val_res = validate_encoder(validation_loader, model, criterion_scl, criterion_ce, epoch, args,
-                                             extra_info=(val_iids,
-                                                         val_trials,
-                                                         val_orders,
-                                                         val_genres))
+        val_loss, val_acc, val_res = validate_encoder(validation_loader, model, criterion_scl, criterion_ce, epoch,
+                                                      args, extra_info=(val_iids,
+                                                                        val_trials,
+                                                                        val_orders,
+                                                                        val_genres))
         val_time2 = time.time()
         print('Validation epoch {}, total time {:.2f}, validation loss {:.7f}'.format(epoch, (val_time2 - val_time1),
                                                                                       val_loss))
         val_loss = torch.tensor([val_loss], dtype=torch.float32)
+        val_semeval_maj_acc, val_semeval_at_least_one_acc, val_agg_results = compute_real_accuracy(val_res)
+        val_semeval_acc = max(val_semeval_maj_acc, val_semeval_at_least_one_acc)
+
         if minimal_loss is None or val_loss < minimal_loss:
             minimal_loss = val_loss
-            best_val_results = val_res
-            print("New minimal loss: {:.5f}".format(minimal_loss))
+            best_val_results = val_agg_results
+            print("New minimal loss: {:.5f}".format(minimal_loss.item()))
             save_file = os.path.join(args.save_folder, 'encoder_best.pth')
             save_model(model, optimizer, args, epoch, minimal_loss, save_file)
 
         # display epoch summary
-        epoch_summary(args.model_name, epoch, train_loss.item(), val_loss.item(), minimal_loss.item())
+        epoch_summary(args.model_name, epoch, train_loss.item(), val_loss.item(), minimal_loss.item(), 'loss')
 
     # save the last model
     save_file = os.path.join(args.save_folder, 'encoder_last.pth')
     save_model(model, optimizer, args, epoch, minimal_loss, save_file)
+
+    # save results in semeval format
+    generate_results_file(train_agg_results, args, prefixes=['train_majority_', 'train_at_least_one_'])
+    generate_results_file(best_val_results, args, prefixes=['val_majority_', 'val_at_least_one_'])
+
+    # save raw results in pickle
+    with open(args.save_folder + '/train_results_' + args.model_name + '.pkl', 'wb') as f:
+        pickle.dump(train_res, f)
+    with open(args.save_folder + '/validation_results_' + args.model_name + '.pkl', 'wb') as f:
+        pickle.dump(val_res, f)
 
 
 if __name__ == '__main__':

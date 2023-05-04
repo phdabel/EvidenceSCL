@@ -44,8 +44,10 @@ def train(dataloader, model, criterion, optimizer, scheduler, epoch, args, extra
         true_labels = inputs['labels'].view(-1)
 
         # add metrics to res dictionary
-        add_metrics(args.dataset, bsz, idx, iid_list, predicted_labels, true_labels, res, None, order_list, trial_list,
-                    genre_list)
+        add_metrics(dataset_name=args.dataset, bash_size=bsz, batch_index=idx, iid_list=iid_list,
+                    predicted_labels=predicted_labels, true_labels=true_labels, res=res, logits=None,
+                    order_list=order_list, trial_list=trial_list, genres_list=genre_list, unlabeled=False,
+                    predicted_evidence=None, gold_evidence_label=None)
 
         loss = criterion(predicted_labels, true_labels)
         # L1 regularization
@@ -115,8 +117,10 @@ def validate(dataloader, model, criterion, epoch, args, extra_info=None):
             true_labels = batch[3].view(-1)
 
             # add metrics to res dictionary
-            add_metrics(args.dataset, bsz, idx, iid_list, predicted_labels, true_labels, res, None, order_list,
-                        trial_list, genre_list)
+            add_metrics(dataset_name=args.dataset, bash_size=bsz, batch_index=idx, iid_list=iid_list,
+                        predicted_labels=predicted_labels, true_labels=true_labels, res=res, logits=None,
+                        order_list=order_list, trial_list=trial_list, genres_list=genre_list, unlabeled=False,
+                        predicted_evidence=None, gold_evidence_label=None)
 
             loss = criterion(predicted_labels, true_labels)
 

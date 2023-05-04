@@ -5,6 +5,7 @@ from pipeline.util import AverageMeter, ProgressMeter, get_lr
 import torch
 import torch.nn as nn
 from .util import add_metrics, create_metrics_dict
+from sklearn.metrics import accuracy_score
 
 
 def train(dataloader, model, criterion_scl, criterion_ce, optimizer, scheduler, epoch, args, extra_info=None):
@@ -12,9 +13,10 @@ def train(dataloader, model, criterion_scl, criterion_ce, optimizer, scheduler, 
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':1.5f')
     learning = AverageMeter('Learning Rate', ':1.7f')
+    top = AverageMeter('Accuracy', ':1.5f')
     progress = ProgressMeter(
         len(dataloader),
-        [batch_time, data_time, learning, losses],
+        [batch_time, data_time, learning, losses, top],
         prefix="Epoch: [{}]".format(epoch),
         logfile=os.path.join(args.save_folder, 'log_training_encoder_' + args.model_name + '.csv'))
 
@@ -34,16 +36,23 @@ def train(dataloader, model, criterion_scl, criterion_ce, optimizer, scheduler, 
 
         inputs = {'input_ids': batch[0],
                   'attention_mask': batch[1],
-                  'token_type_ids': batch[2],
-                  'labels': batch[3]}
+                  'token_type_ids': batch[2]}
 
         feature1, feature2 = model(**inputs)
-        scl_labels = inputs['labels']
-        if 'evidencescl' in args.model_name and args.num_classes == 3:
-            scl_labels = torch.tensor(scl_labels < 2, dtype=torch.long)
 
-        loss_scl = criterion_scl(feature2, scl_labels)
-        loss_ce = criterion_ce(feature1, inputs['labels'])
+        true_labels = batch[3].view(-1)
+        true_evidence_labels = torch.tensor(true_labels < 2, dtype=torch.long) \
+            if 'evidencescl' in args.model_name and args.num_classes == 3 else true_labels
+        predicted_labels = feature1.view(-1, args.num_classes)
+
+        # add metrics to res dictionary
+        add_metrics(dataset_name=args.dataset, bash_size=bsz, batch_index=idx, iid_list=iid_list,
+                    predicted_labels=predicted_labels, true_labels=true_labels, res=res, logits=None,
+                    order_list=order_list, trial_list=trial_list, genres_list=genre_list, unlabeled=False,
+                    predicted_evidence=None, gold_evidence_label=true_evidence_labels)
+
+        loss_scl = criterion_scl(feature2, true_evidence_labels)
+        loss_ce = criterion_ce(predicted_labels, true_labels)
         loss = loss_scl + loss_ce * args.alpha
 
         # L1 regularization
@@ -55,7 +64,9 @@ def train(dataloader, model, criterion_scl, criterion_ce, optimizer, scheduler, 
         if args.gradient_accumulation_steps > 1:
             loss /= args.gradient_accumulation_steps
 
+        acc = accuracy_score(true_labels.cpu().numpy(), predicted_labels.argmax(1).cpu().numpy())
         # update metrics
+        top.update(acc, bsz)
         losses.update(loss.item(), bsz)
         learning.update(get_lr(optimizer), bsz)
         loss.backward()
@@ -73,16 +84,17 @@ def train(dataloader, model, criterion_scl, criterion_ce, optimizer, scheduler, 
         if (idx + 1) % args.print_freq == 0:
             progress.display(idx)
 
-    return losses.avg, res
+    return losses.avg, top.avg, res
 
 
 def validate(dataloader, model, criterion_scl, criterion_ce, epoch, args, extra_info=None):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':1.5f')
+    top = AverageMeter('Accuracy', ':1.5f')
     progress = ProgressMeter(
         len(dataloader),
-        [batch_time, data_time, losses],
+        [batch_time, data_time, losses, top],
         prefix="Epoch: [{}]".format(epoch),
         logfile=os.path.join(args.save_folder, 'log_validation_encoder_' + args.model_name + '.csv'))
 
@@ -101,15 +113,22 @@ def validate(dataloader, model, criterion_scl, criterion_ce, epoch, args, extra_
 
             inputs = {'input_ids': batch[0],
                       'attention_mask': batch[1],
-                      'token_type_ids': batch[2],
-                      'labels': batch[3]}
-            feature1, feature2 = model(**inputs)
-            scl_labels = inputs['labels']
-            if 'evidencescl' in args.model_name and args.num_classes == 3:
-                scl_labels = torch.tensor(scl_labels < 2, dtype=torch.long)
+                      'token_type_ids': batch[2]}
 
-            loss_scl = criterion_scl(feature2, scl_labels)
-            loss_ce = criterion_ce(feature1, inputs['labels'])
+            feature1, feature2 = model(**inputs)
+            true_labels = batch[3].view(-1)
+            true_evidence_labels = torch.tensor(true_labels < 2, dtype=torch.long) \
+                if 'evidencescl' in args.model_name and args.num_classes == 3 else true_labels
+            predicted_labels = feature1.view(-1, args.num_classes)
+
+            # add metrics to res dictionary
+            add_metrics(dataset_name=args.dataset, bash_size=bsz, batch_index=idx, iid_list=iid_list,
+                        predicted_labels=predicted_labels, true_labels=true_labels, res=res, logits=None,
+                        order_list=order_list, trial_list=trial_list, genres_list=genre_list, unlabeled=False,
+                        predicted_evidence=None, gold_evidence_label=true_evidence_labels)
+
+            loss_scl = criterion_scl(feature2, true_evidence_labels)
+            loss_ce = criterion_ce(predicted_labels, true_labels)
             loss = loss_scl + loss_ce * args.alpha
 
             if args.gradient_accumulation_steps > 1:
@@ -117,6 +136,8 @@ def validate(dataloader, model, criterion_scl, criterion_ce, epoch, args, extra_
 
             # update metric
             losses.update(loss.item(), bsz)
+            acc = accuracy_score(true_labels.cpu().numpy(), predicted_labels.argmax(1).cpu().numpy())
+            top.update(acc, bsz)
 
             # measuring elapsed time
             batch_time.update(time.time() - end)
@@ -126,4 +147,4 @@ def validate(dataloader, model, criterion_scl, criterion_ce, epoch, args, extra_
             if (idx + 1) % args.print_freq == 0:
                 progress.display(idx)
 
-    return losses.avg, res
+    return losses.avg, top.avg, res
