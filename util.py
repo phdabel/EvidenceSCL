@@ -27,8 +27,23 @@ def parse_option():
                         help='Model name (default: evidencescl)')
     parser.add_argument('--dataset', type=str, default='nli4ct', choices=['nli4ct', 'mednli', 'multinli', 'local'],
                         help='Dataset name (default: nli4ct)')
+    parser.add_argument('--dataset_suffix', type=str, default=None,
+                        help="Extra information to be added in the dataset's name (default: None). "
+                             "This is useful when combining datasets. For example, if you want to combine "
+                             "the datasets 'nli4ct' on a pre-trained checkpoint trained on 'mednli', you can set "
+                             "the parameters as if you was training on nli4ct and add 'mednli' in the --dataset_suffix "
+                             "to concatenate it at the end of the folder's name.")
+    parser.add_argument('--combine', action='store_true', default=False,
+                        help='Combine dataset for training. This option should should be used together with a '
+                             'pre-trained checkpoint from another dataset and a dataset suffix. For example: '
+                             'to combine NLI4CT on a model trained on MedNLI, you should to inform the path of the '
+                             'MedNLI checkpoint with the --encoder_ckpt argument, set the --resume option, '
+                             '--dataset nli4ct, --dataset_suffix mednli, and inform the remaining parameters as usual.')
     parser.add_argument('--data_folder', type=str, default='./datasets/preprocessed',
                         help='Datasets base path (default: ./datasets/preprocessed)')
+    parser.add_argument('--resume', action='store_true', default=False,
+                        help='Resume training from the checkpoint. If no checkpoint is informed try to obtain it '
+                             'from parameters settings.')
     parser.add_argument('--encoder_ckpt', type=str, default=None,
                         help='Path to the pre-trained encoder checkpoint (default: None)')
 
@@ -36,7 +51,8 @@ def parse_option():
     parser.add_argument('--workers', default=2, type=int, metavar='N',
                         help='Number of data loading workers (default: 2)')
     parser.add_argument('--epochs', default=3, type=int, metavar='N',
-                        help='Number of total epochs to run')
+                        help='Number of total epochs to run. If combining a dataset, this value will be added to the '
+                             'number of epochs of the pre-trained model. (default: 3)')
     parser.add_argument('--batch_size', type=int, default=512,
                         help='Batch size in number of sentences per batch')
     parser.add_argument('--learning_rate', type=float, default=3e-5,
@@ -80,12 +96,20 @@ def parse_option():
     parser.add_argument('--ckpt', type=str, default=None, help="Path to the pre-trained models")
     args = parser.parse_args()
 
-    args.model_path = './save/{}_models'.format(args.dataset)
+    args.model_path = './save/{}_models'.format(args.dataset) if args.dataset_suffix is None \
+        else './save/{}_{}_models'.format(args.dataset, args.dataset_suffix)
     args.model_name = '{}_{}L_len_{}_lr_{}_w_decay_{}_bsz_{}_temp_{}'. \
         format(args.model_name, args.num_classes, args.max_seq_length,
                args.learning_rate, args.weight_decay, args.batch_size, args.temp)
 
+    args.start_epoch = 0
     args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    if args.combine and not args.encoder_ckpt:
+        raise ValueError("When combining datasets, the encoder checkpoint from the pre-trained model must be informed.")
+
+    if args.combine and not args.dataset_suffix:
+        raise ValueError("When combining datasets, the dataset suffix from the pre-trained model must be informed.")
 
     args.save_folder = os.path.join(args.model_path, args.model_name)
     if not os.path.isdir(args.save_folder):
@@ -337,14 +361,25 @@ def get_dataloader(data_folder, dataset_name, filename, tokenizer, batch_size, w
     return dataloader, iids, trials, orders, genres
 
 
-def save_model(model, optimizer, args, epoch, best_acc, save_file):
+def save_model(model, optimizer, args, epoch, best_metric, save_file):
+    """
+    Args:
+        model: transformers.PreTrainedModel
+        optimizer: torch.optim.Optimizer
+        args: argparse.Namespace
+        epoch: int
+        best_metric: float
+        save_file: str
+
+    Returns: None
+    """
     print('==> Saving...')
     state = {
         'args': args,
         'models': model.state_dict(),
         'optimizer': optimizer.state_dict(),
         'epoch': epoch,
-        'best_acc': best_acc
+        'best_metric': best_metric
     }
     torch.save(state, save_file)
     del state
@@ -444,3 +479,29 @@ def sort_by_seq_lens(batch, sequences_lengths, descending=True):
     restoration_index = idx_range.index_select(0, reverse_mapping)
 
     return sorted_batch, sorted_seq_lens, sorting_index, restoration_index
+
+
+def epoch_summary(model_name, epoch, training_semeval_metric, validation_semeval_metric, best_validation_metric,
+                  metric_name='accuracy'):
+    """
+
+    Args:
+        model_name:
+        epoch:
+        training_semeval_metric:
+        validation_semeval_metric:
+        best_validation_metric:
+        metric_name:
+
+    Returns:
+
+    """
+    print("=========================")
+    print("Model:               {}".format(model_name))
+    print("Epoch:               {}".format(epoch))
+    print("-------------------------")
+    print("Metric name: {}".format(metric_name))
+    print("Training metric:   {:.3f}".format(training_semeval_metric))
+    print("Validation metric: {:.3f}".format(validation_semeval_metric))
+    print("Best metric:       {:.3f}".format(best_validation_metric))
+    print("=========================")

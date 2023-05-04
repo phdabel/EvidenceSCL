@@ -3,7 +3,7 @@ import os
 import time
 import torch
 import warnings
-from util import save_model, parse_option, get_dataloaders, compute_real_accuracy, generate_results_file
+from util import save_model, parse_option, get_dataloaders, compute_real_accuracy, generate_results_file, epoch_summary
 
 from torch.optim import AdamW
 from torch.nn import CrossEntropyLoss
@@ -103,19 +103,6 @@ def main_worker(gpu, args):
 
     generate_results_file(train_agg_results, args, prefixes=['train_majority_', 'train_at_least_one_'])
     generate_results_file(best_val_results, args, prefixes=['val_majority_', 'val_at_least_one_'])
-
-
-def epoch_summary(model_name, epoch, training_semeval_accuracy, validation_semeval_accuracy, best_validation_accuracy):
-    """
-    Display a summary of the current epoch
-    """
-    print("=========================")
-    print("Model:               {}".format(model_name))
-    print("Epoch:               {}".format(epoch))
-    print("Training accuracy:   {:.3f}".format(training_semeval_accuracy))
-    print("Validation accuracy: {:.3f}".format(validation_semeval_accuracy))
-    print("Best accuracy:       {:.3f}".format(best_validation_accuracy))
-    print("=========================")
 
 
 if __name__ == '__main__':

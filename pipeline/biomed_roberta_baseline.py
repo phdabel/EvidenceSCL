@@ -44,7 +44,7 @@ def train(dataloader, model, criterion, optimizer, scheduler, epoch, args, extra
         true_labels = inputs['labels'].view(-1)
 
         # add metrics to res dictionary
-        add_metrics(args.dataset, bsz, idx, iid_list, predicted_labels, true_labels, res, None, order_list,  trial_list,
+        add_metrics(args.dataset, bsz, idx, iid_list, predicted_labels, true_labels, res, None, order_list, trial_list,
                     genre_list)
 
         loss = criterion(predicted_labels, true_labels)

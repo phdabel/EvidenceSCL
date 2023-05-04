@@ -90,11 +90,14 @@ def create_metrics_dict():
 
 
 def add_metrics(dataset_name, bash_size, batch_index, iid_list, predicted_labels, true_labels, res, logits=None,
-                order_list=None, trial_list=None, genres_list=None, unlabeled=False):
+                order_list=None, trial_list=None, genres_list=None, unlabeled=False, predicted_evidence=None,
+                gold_evidence_label=None):
     """
     Add metrics to the res dictionary.
 
     Args:
+        predicted_evidence:
+        gold_evidence_label:
         genres_list:
         logits:
         dataset_name: str
@@ -111,8 +114,13 @@ def add_metrics(dataset_name, bash_size, batch_index, iid_list, predicted_labels
     Returns:
     """
     res["predicted_label"] += predicted_labels.argmax(1).cpu().numpy().tolist()
+    res["predicted_evidence"] += predicted_evidence.argmax(1).cpu().numpy().tolist() \
+        if predicted_evidence is not None else None
+
     if not unlabeled:
         res["gold_label"] += true_labels.cpu().numpy().tolist()
+        res["gold_evidence_label"] += gold_evidence_label.cpu().numpy().tolist() \
+            if gold_evidence_label is not None else None
 
     if logits is not None:
         res["logits"] += logits.cpu().numpy().tolist()

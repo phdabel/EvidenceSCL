@@ -4,9 +4,10 @@ from pipeline.util import AverageMeter, ProgressMeter, get_lr
 
 import torch
 import torch.nn as nn
+from .util import add_metrics, create_metrics_dict
 
 
-def train(dataloader, model, criterion_scl, criterion_ce, optimizer, scheduler, epoch, args):
+def train(dataloader, model, criterion_scl, criterion_ce, optimizer, scheduler, epoch, args, extra_info=None):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':1.5f')
@@ -15,7 +16,13 @@ def train(dataloader, model, criterion_scl, criterion_ce, optimizer, scheduler, 
         len(dataloader),
         [batch_time, data_time, learning, losses],
         prefix="Epoch: [{}]".format(epoch),
-        logfile=os.path.join(args.save_folder, 'log_training_' + args.model_name + '.csv'))
+        logfile=os.path.join(args.save_folder, 'log_training_encoder_' + args.model_name + '.csv'))
+
+    res = create_metrics_dict()
+
+    iid_list, trial_list, order_list, genre_list = None, None, None, None
+    if extra_info is not None:
+        iid_list, trial_list, order_list, genre_list = extra_info
 
     l1_criterion = nn.L1Loss()
     model.train()
@@ -23,7 +30,8 @@ def train(dataloader, model, criterion_scl, criterion_ce, optimizer, scheduler, 
     for idx, batch in enumerate(dataloader):
         data_time.update(time.time() - end)
         bsz = batch[0].size(0)
-        batch = tuple(t.cuda() for t in batch)
+        batch = tuple(t.cuda() for t in batch) if torch.cuda.is_available() else batch
+
         inputs = {'input_ids': batch[0],
                   'attention_mask': batch[1],
                   'token_type_ids': batch[2],
@@ -31,7 +39,7 @@ def train(dataloader, model, criterion_scl, criterion_ce, optimizer, scheduler, 
 
         feature1, feature2 = model(**inputs)
         scl_labels = inputs['labels']
-        if args.model_name == 'EvidenceSCL' and args.num_classes == 3:
+        if 'evidencescl' in args.model_name and args.num_classes == 3:
             scl_labels = torch.tensor(scl_labels < 2, dtype=torch.long)
 
         loss_scl = criterion_scl(feature2, scl_labels)
@@ -40,7 +48,7 @@ def train(dataloader, model, criterion_scl, criterion_ce, optimizer, scheduler, 
 
         # L1 regularization
         if args.l1_regularization > 0:
-            for param in model.encoder.parameters():
+            for param in model.parameters():
                 loss += args.l1_regularization * l1_criterion(param, torch.zeros_like(param))
 
         # gradient accumulation
@@ -50,8 +58,8 @@ def train(dataloader, model, criterion_scl, criterion_ce, optimizer, scheduler, 
         # update metrics
         losses.update(loss.item(), bsz)
         learning.update(get_lr(optimizer), bsz)
-
         loss.backward()
+
         if ((idx + 1) % args.gradient_accumulation_steps == 0) or ((idx + 1) == len(dataloader)):
             optimizer.step()
             scheduler.step((epoch + idx) / len(dataloader))
@@ -65,10 +73,10 @@ def train(dataloader, model, criterion_scl, criterion_ce, optimizer, scheduler, 
         if (idx + 1) % args.print_freq == 0:
             progress.display(idx)
 
-    return losses.avg
+    return losses.avg, res
 
 
-def validate(dataloader, model, criterion_scl, criterion_ce, epoch, args):
+def validate(dataloader, model, criterion_scl, criterion_ce, epoch, args, extra_info=None):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':1.5f')
@@ -76,22 +84,28 @@ def validate(dataloader, model, criterion_scl, criterion_ce, epoch, args):
         len(dataloader),
         [batch_time, data_time, losses],
         prefix="Epoch: [{}]".format(epoch),
-        logfile=os.path.join(args.save_folder, 'log_validation_' + args.model_name + '.csv'))
+        logfile=os.path.join(args.save_folder, 'log_validation_encoder_' + args.model_name + '.csv'))
+
+    res = create_metrics_dict()
+
+    iid_list, trial_list, order_list, genre_list = None, None, None, None
+    if extra_info is not None:
+        iid_list, trial_list, order_list, genre_list = extra_info
 
     model.eval()
     with torch.no_grad():
         end = time.time()
         for idx, batch in enumerate(dataloader):
             bsz = batch[0].size(0)
+            batch = tuple(t.cuda() for t in batch) if torch.cuda.is_available() else batch
 
-            batch = tuple(t.cuda() for t in batch)
             inputs = {'input_ids': batch[0],
                       'attention_mask': batch[1],
                       'token_type_ids': batch[2],
                       'labels': batch[3]}
             feature1, feature2 = model(**inputs)
             scl_labels = inputs['labels']
-            if args.model_name == 'EvidenceSCL' and args.num_classes == 3:
+            if 'evidencescl' in args.model_name and args.num_classes == 3:
                 scl_labels = torch.tensor(scl_labels < 2, dtype=torch.long)
 
             loss_scl = criterion_scl(feature2, scl_labels)
@@ -112,4 +126,4 @@ def validate(dataloader, model, criterion_scl, criterion_ce, epoch, args):
             if (idx + 1) % args.print_freq == 0:
                 progress.display(idx)
 
-    return losses.avg
+    return losses.avg, res
