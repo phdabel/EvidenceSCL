@@ -40,7 +40,7 @@ def main_worker(gpu, args):
         num_labels=args.max_seq_length,
         output_attentions=False,  # Whether the models return attentions weights.
         output_hidden_states=False,  # Whether the models return all hidden-states.
-    ))
+    ), num_classes=args.num_classes)
     tokenizer = RobertaTokenizer.from_pretrained("allenai/biomed_roberta_base")
 
     if not torch.cuda.is_available():
@@ -58,14 +58,18 @@ def main_worker(gpu, args):
     # optionally resume from a checkpoint
     if args.resume:
         if args.encoder_ckpt is not None and os.path.isfile(args.encoder_ckpt):
+            # load checkpoint specified by encoder_ckpt
+            print("=> loading checkpoint '{}'".format(args.encoder_ckpt))
             checkpoint = torch.load(args.encoder_ckpt)
             model.load_state_dict(checkpoint['models'])
         else:
             try:
-                checkpoint = torch.load(os.path.join(args.save_folder, 'encoder.pth'),
+                # continue training from the best checkpoint
+                checkpoint = torch.load(os.path.join(args.save_folder, 'encoder_best.pth'),
                                         map_location=args.device)
                 model.load_state_dict(checkpoint['models'])
             except FileNotFoundError:
+                # raise error if no checkpoint found
                 raise "No encoder checkpoint found. Please specify a checkpoint to load or ensure a encoder."
 
         args.start_epoch = checkpoint['epoch']

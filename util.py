@@ -25,6 +25,8 @@ def parse_option():
     parser.add_argument('--model_name', type=str, default='evidencescl', choices=['evidencescl', 'pairscl',
                                                                                   'biomed'],
                         help='Model name (default: evidencescl)')
+    parser.add_argument('--evidence_retrieval', action='store_true', default=False,
+                        help='Use evidence retrieval model to select the evidence sentences.')
     parser.add_argument('--dataset', type=str, default='nli4ct', choices=['nli4ct', 'mednli', 'multinli', 'local'],
                         help='Dataset name (default: nli4ct)')
     parser.add_argument('--dataset_suffix', type=str, default=None,
@@ -98,9 +100,10 @@ def parse_option():
 
     args.model_path = './save/{}_models'.format(args.dataset) if args.dataset_suffix is None \
         else './save/{}_{}_models'.format(args.dataset, args.dataset_suffix)
-    args.model_name = '{}_{}L_len_{}_lr_{}_w_decay_{}_bsz_{}_temp_{}'. \
+    args.model_name = '{}_{}L_len_{}_lr_{}_w_decay_{}_bsz_{}_temp_{}{}'. \
         format(args.model_name, args.num_classes, args.max_seq_length,
-               args.learning_rate, args.weight_decay, args.batch_size, args.temp)
+               args.learning_rate, args.weight_decay, args.batch_size, args.temp,
+               '_er' if args.evidence_retrieval else '')
 
     args.start_epoch = 0
     args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -119,6 +122,21 @@ def parse_option():
 
 
 def compute_real_accuracy(results):
+    """
+    Compute accuracy for SemEval-2023 Task 7.
+
+    Group the results by the instance id (iid) and computes the accuracy based on the majority label or
+        the presence of at least one entailment label within the predictions.
+
+    Args:
+        results: dictionary
+
+    Returns:
+        acc: float (accuracy based on the majority label by iid)
+        acc2: float (accuracy based on the presence of at least one entailment label by iid)
+        aggregated_results: pandas.DataFrame (aggregated results by iid)
+
+    """
     keys_to_remove = [key for key in results.keys() if len(results[key]) == 0]
     for key in keys_to_remove:
         del results[key]
@@ -140,6 +158,16 @@ def compute_real_accuracy(results):
 
 
 def generate_results_file(results_dataframe, args, prefixes=['majority_', 'at_least_one_']):
+    """
+    Outputs results file for SemEval-2023 Task 7.
+    Args:
+        results_dataframe: pandas.DataFrame (aggregated results by iid)
+        args: argparse.Namespace (arguments)
+        prefixes: list (prefixes for the output files - default: ['majority_', 'at_least_one_'])
+
+    Returns:
+
+    """
     majority_results = {}
     at_least_one_results = {}
     for i, row in results_dataframe.iterrows():

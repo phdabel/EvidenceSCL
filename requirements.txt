@@ -2,6 +2,6 @@ wget>=3.2
 validators>=0.20
 pandas>=2.0
 tqdm>=4.65
-scikit-learn>=1.2
+scikit-learn==1.2.2
 transformers>=4.28
 

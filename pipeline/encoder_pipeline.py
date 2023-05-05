@@ -40,7 +40,7 @@ def train(dataloader, model, criterion_scl, criterion_ce, optimizer, scheduler, 
 
         feature1, feature2 = model(**inputs)
 
-        true_labels = batch[3].view(-1)
+        true_labels = batch[3].view(-1) if not args.evidence_retrieval else batch[4].view(-1)
         true_evidence_labels = torch.tensor(true_labels < 2, dtype=torch.long) \
             if 'evidencescl' in args.model_name and args.num_classes == 3 else true_labels
         predicted_labels = feature1.view(-1, args.num_classes)
@@ -116,16 +116,18 @@ def validate(dataloader, model, criterion_scl, criterion_ce, epoch, args, extra_
                       'token_type_ids': batch[2]}
 
             feature1, feature2 = model(**inputs)
-            true_labels = batch[3].view(-1)
+            true_labels = batch[3].view(-1) if not args.evidence_retrieval else batch[4].view(-1)
             true_evidence_labels = torch.tensor(true_labels < 2, dtype=torch.long) \
                 if 'evidencescl' in args.model_name and args.num_classes == 3 else true_labels
             predicted_labels = feature1.view(-1, args.num_classes)
 
             # add metrics to res dictionary
             add_metrics(dataset_name=args.dataset, bash_size=bsz, batch_index=idx, iid_list=iid_list,
-                        predicted_labels=predicted_labels, true_labels=true_labels, res=res, logits=None,
-                        order_list=order_list, trial_list=trial_list, genres_list=genre_list, unlabeled=False,
-                        predicted_evidence=None, gold_evidence_label=true_evidence_labels)
+                        predicted_labels=predicted_labels if not args.evidence_retrieval else None,
+                        true_labels=true_labels, res=res, logits=None, order_list=order_list, trial_list=trial_list,
+                        genres_list=genre_list, unlabeled=False,
+                        predicted_evidence=predicted_labels if args.evidence_retrieval else None,
+                        gold_evidence_label=true_evidence_labels)
 
             loss_scl = criterion_scl(feature2, true_evidence_labels)
             loss_ce = criterion_ce(predicted_labels, true_labels)

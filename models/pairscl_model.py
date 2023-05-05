@@ -13,7 +13,7 @@ class RoBERTaForCL(RobertaPreTrainedModel):
         self.num_labels = config.num_labels
         self.bert = RobertaModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        # 768 128
+        # 768 max_seq_length
         self.fc = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
