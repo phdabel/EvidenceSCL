@@ -63,7 +63,8 @@ def main_worker(args):
         print("Test accuracy of the model: {:2.3}".format(accuracy))
     else:
         print("Test accuracy of the model: N/A")
-        generate_results_file(results, args, prefixes=['test_majority_', 'test_at_least_one_'])
+
+    generate_results_file(results, args, prefixes=['test_majority_', 'test_at_least_one_'])
 
 
 if __name__ == '__main__':
