@@ -1,5 +1,6 @@
 import sys
 import os
+import pickle
 import torch
 import warnings
 from util import parse_option, get_dataloaders, generate_results_file
@@ -53,6 +54,10 @@ def main_worker(args):
 
     results, accuracy = test_biomed_roberta(test_loader, classifier, args, extra=(iids, trials, orders, genres,
                                                                                   unlabeled))
+
+    # save results in pickle file
+    with open(args.save_folder + '/test_results_' + args.model_name + '.pkl', 'wb') as f:
+        pickle.dump(results, f)
 
     if accuracy is not None:
         print("Test accuracy of the model: {:2.3}".format(accuracy))

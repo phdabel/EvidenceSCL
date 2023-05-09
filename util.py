@@ -183,7 +183,8 @@ def compress_results(content, args, prefix='majority_'):
     with open(filename, "w") as json_file:
         json_file.write(json.dumps(content, indent=4))
 
-    output_file = os.path.join(args.save_folder, prefix + args.model_name.replace('.', '_') + '.zip')
+    base_name = args.model_name.replace('.', '_')
+    output_file = os.path.join(args.save_folder, prefix + base_name + '.zip')
     with ZipFile(output_file, mode='w') as zipObj:
         zipObj.write(filename)
 

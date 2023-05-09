@@ -2,6 +2,7 @@ import sys
 import os
 import time
 import torch
+import pickle
 import warnings
 from util import save_model, parse_option, get_dataloaders, compute_real_accuracy, generate_results_file, epoch_summary
 
@@ -100,6 +101,12 @@ def main_worker(gpu, args):
     # save the last model
     save_file = os.path.join(args.save_folder, 'classifier_last.pth')
     save_model(classifier, optimizer, args, epoch, val_semeval_acc, save_file)
+
+    with open(args.save_folder + '/train_results_' + args.model_name + '.pkl', 'wb') as f:
+        pickle.dump(train_result, f)
+
+    with open(args.save_folder + '/val_results_' + args.model_name + '.pkl', 'wb') as f:
+        pickle.dump(val_result, f)
 
     generate_results_file(train_agg_results, args, prefixes=['train_majority_', 'train_at_least_one_'])
     generate_results_file(best_val_results, args, prefixes=['val_majority_', 'val_at_least_one_'])

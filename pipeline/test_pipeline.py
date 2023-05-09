@@ -59,8 +59,4 @@ def run_classifier_test(dataloader, classifier, args, extra=None):
             if (idx + 1) % args.print_freq == 0:
                 progress.display(idx)
 
-    # save results in pickle file
-    with open(args.save_folder + '/test_results_' + args.model_name + '.pkl', 'wb') as f:
-        pickle.dump(res, f)
-
     return (res, top.avg) if not unlabeled else (res, None)
