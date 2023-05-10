@@ -55,7 +55,7 @@ def main_worker(args):
     results, accuracy = test_biomed_roberta(test_loader, classifier, args, extra=(iids, trials, orders, genres,
                                                                                   unlabeled))
 
-    _, _, test_agg_results = compute_real_accuracy(results)
+    _, _, test_agg_results = compute_real_accuracy(results, unlabeled=unlabeled)
 
     # save results in pickle file
     with open(args.save_folder + '/test_results_' + args.model_name + '.pkl', 'wb') as f:

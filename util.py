@@ -121,7 +121,7 @@ def parse_option():
     return args
 
 
-def compute_real_accuracy(results):
+def compute_real_accuracy(results, unlabeled=False):
     """
     Compute accuracy for SemEval-2023 Task 7.
 
@@ -130,6 +130,7 @@ def compute_real_accuracy(results):
 
     Args:
         results: dictionary
+        unlabeled: boolean (if True, the gold_label must be present in the results)
 
     Returns:
         acc: float (accuracy based on the majority label by iid)
@@ -141,7 +142,7 @@ def compute_real_accuracy(results):
     for key in keys_to_remove:
         del results[key]
 
-    if 'gold_label' not in results.keys():
+    if not unlabeled and 'gold_label' not in results.keys():
         raise ValueError("gold_label not found in results")
 
     results_df = pd.DataFrame(results)
@@ -151,9 +152,11 @@ def compute_real_accuracy(results):
     aggregated_results = results_df.groupby('iid').aggregate(list).reset_index()
     aggregated_results['majority_label'] = [mode(row.predicted_label) for _, row in aggregated_results.iterrows()]
     aggregated_results['at_least_one'] = [int(sum(row.predicted_label) > 0) for _, row in aggregated_results.iterrows()]
-    aggregated_results['gold_label'] = [mode(row.gold_label) for _, row in aggregated_results.iterrows()]
-    acc = accuracy_score(aggregated_results['gold_label'], aggregated_results['majority_label'])
-    acc2 = accuracy_score(aggregated_results['gold_label'], aggregated_results['at_least_one'])
+    acc, acc2 = None, None
+    if not unlabeled:
+        aggregated_results['gold_label'] = [mode(row.gold_label) for _, row in aggregated_results.iterrows()]
+        acc = accuracy_score(aggregated_results['gold_label'], aggregated_results['majority_label'])
+        acc2 = accuracy_score(aggregated_results['gold_label'], aggregated_results['at_least_one'])
     return acc, acc2, aggregated_results
 
 
