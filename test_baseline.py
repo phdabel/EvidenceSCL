@@ -3,7 +3,7 @@ import os
 import pickle
 import torch
 import warnings
-from util import parse_option, get_dataloaders, generate_results_file
+from util import parse_option, get_dataloaders, generate_results_file, compute_real_accuracy
 
 import torch.backends.cudnn as cudnn
 from transformers import RobertaTokenizer, RobertaModel
@@ -55,6 +55,8 @@ def main_worker(args):
     results, accuracy = test_biomed_roberta(test_loader, classifier, args, extra=(iids, trials, orders, genres,
                                                                                   unlabeled))
 
+    _, _, test_agg_results = compute_real_accuracy(results)
+
     # save results in pickle file
     with open(args.save_folder + '/test_results_' + args.model_name + '.pkl', 'wb') as f:
         pickle.dump(results, f)
@@ -64,7 +66,7 @@ def main_worker(args):
     else:
         print("Test accuracy of the model: N/A")
 
-    generate_results_file(results, args, prefixes=['test_majority_', 'test_at_least_one_'])
+    generate_results_file(test_agg_results, args, prefixes=['test_majority_', 'test_at_least_one_'])
 
 
 if __name__ == '__main__':
