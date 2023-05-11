@@ -201,7 +201,7 @@ def get_dataframes(dataset, data_folder, num_classes):
         # NLI4CT dataset uses 2 labels even though the model has 3 classes
         train_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', "nli4ct_2L_train.pkl"))
         val_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', "nli4ct_2L_val.pkl"))
-        test_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', 'nli4ct_unlabeled_test.pkl'))
+        test_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', 'nli4ct_2L_test.pkl'))
     elif dataset == 'mednli':
         train_df = pd.read_pickle(os.path.join(data_folder, 'mednli', "mednli_%dL_train.pkl" % num_classes))
         val_df = pd.read_pickle(os.path.join(data_folder, 'mednli', "mednli_%dL_val.pkl" % num_classes))

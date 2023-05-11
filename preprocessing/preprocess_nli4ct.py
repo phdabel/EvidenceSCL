@@ -166,7 +166,7 @@ def preprocess_data(input_dir, target_dir):
     nli4ct_val_df.to_pickle(os.path.join(target_dir, 'nli4ct_2L_val.pkl'))
     invalid_nli4ct_train_df.to_pickle(os.path.join(target_dir, 'invalid_nli4ct_2L_train.pkl'))
     invalid_nli4ct_val_df.to_pickle(os.path.join(target_dir, 'invalid_nli4ct_2L_val.pkl'))
-    nli4ct_test_df.to_pickle(os.path.join(target_dir, 'nli4ct_unlabeled_test.pkl'))
+    nli4ct_test_df.to_pickle(os.path.join(target_dir, 'nli4ct_2L_test.pkl'))
 
 
 def get_args():
