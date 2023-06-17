@@ -105,7 +105,7 @@ def add_metrics(dataset_name, bash_size, batch_index, iid_list, predicted_labels
         batch_index: int
         iid_list: list
         predicted_labels: tensor. shape: (bash_size, num_classes)
-        true_labels: tensor. shape: (bash_size, )
+        true_labels: tensor.shape: (bash_size, )
         res: dict
         order_list: list
         trial_list: list

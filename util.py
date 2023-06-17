@@ -49,6 +49,13 @@ def parse_option():
     parser.add_argument('--encoder_ckpt', type=str, default=None,
                         help='Path to the pre-trained encoder checkpoint (default: None)')
 
+    # evaluation
+    parser.add_argument('--evaluate_dataset', type=str, default=None, choices=['nli4ct', 'mednli', 'multinli'],
+                        help="Dataset name to evaluate the model (default: None). "
+                             "If None, the dataset will be the same as the training dataset.")
+    parser.add_argument('--evaluate_stage', type=str, default='test', choices=['training', 'validation', 'test'],
+                        help="Informs dataset's stage that will be used for evaluation (default: test).")
+
     # training
     parser.add_argument('--workers', default=2, type=int, metavar='N',
                         help='Number of data loading workers (default: 2)')

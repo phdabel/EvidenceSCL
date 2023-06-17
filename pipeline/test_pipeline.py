@@ -45,8 +45,9 @@ def run_classifier_test(dataloader, classifier, args, extra=None):
             true_labels = None if unlabeled else batch[3].view(-1)
 
             # add metrics to res dictionary
+            evaluate_dataset = args.evaluate_dataset if args.evaluate_dataset is not None else args.dataset
 
-            add_metrics(args.dataset, bsz, idx, iids, predicted_labels, true_labels, res, logits, sentence_orders,
+            add_metrics(evaluate_dataset, bsz, idx, iids, predicted_labels, true_labels, res, logits, sentence_orders,
                         trials, genre_list, unlabeled=unlabeled)
 
             if extra is not None and not unlabeled:

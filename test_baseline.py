@@ -42,20 +42,22 @@ def main_worker(args):
     cudnn.benchmark = True
 
     # load test data
-    dataloader_struct = get_dataloaders(args.dataset, args.data_folder, tokenizer, args.batch_size, args.workers,
+    evaluate_dataset = args.evaluate_dataset if args.evaluate_dataset is not None else args.dataset
+    stage = args.dataset_stage
+
+    dataloader_struct = get_dataloaders(evaluate_dataset, args.data_folder, tokenizer, args.batch_size, args.workers,
                                         args.max_seq_length, args.num_classes)
 
-    test_loader = dataloader_struct['loader']['test']
-    iids = dataloader_struct['iids']['test']
-    trials = dataloader_struct['trials']['test']
-    orders = dataloader_struct['orders']['test']
-    genres = dataloader_struct['genres']['test']
-    unlabeled = True if args.dataset == 'nli4ct' else False
+    _loader = dataloader_struct['loader'][stage]
+    iids = dataloader_struct['iids'][stage]
+    trials = dataloader_struct['trials'][stage]
+    orders = dataloader_struct['orders'][stage]
+    genres = dataloader_struct['genres'][stage]
+    unlabeled = True if evaluate_dataset == 'nli4ct' and stage == 'test' else False
 
-    results, accuracy = test_biomed_roberta(test_loader, classifier, args, extra=(iids, trials, orders, genres,
-                                                                                  unlabeled))
+    results, accuracy = test_biomed_roberta(_loader, classifier, args, extra=(iids, trials, orders, genres, unlabeled))
 
-    _, _, test_agg_results = compute_real_accuracy(results, unlabeled=unlabeled)
+    _, _, _agg_results = compute_real_accuracy(results, unlabeled=unlabeled)
 
     # save results in pickle file
     with open(args.save_folder + '/test_results_' + args.model_name + '.pkl', 'wb') as f:
@@ -66,7 +68,7 @@ def main_worker(args):
     else:
         print("Test accuracy of the model: N/A")
 
-    generate_results_file(test_agg_results, args, prefixes=['test_majority_', 'test_at_least_one_'])
+    generate_results_file(_agg_results, args, prefixes=['test_majority_', 'test_at_least_one_'])
 
 
 if __name__ == '__main__':
