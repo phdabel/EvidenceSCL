@@ -3,6 +3,7 @@ import json
 
 import pandas as pd
 import argparse
+from datetime import datetime
 
 import torch
 import torch.nn as nn
@@ -128,21 +129,22 @@ def parse_option():
     return args
 
 
-def compute_real_accuracy(results, unlabeled=False):
+def compute_real_accuracy(results, args, stage, unlabeled=False):
     """
     Compute accuracy for SemEval-2023 Task 7.
 
-    Group the results by the instance id (iid) and computes the accuracy based on the majority label or
+    Group the results by the instance id (iid) and trial and computes the accuracy based on the majority label or
         the presence of at least one entailment label within the predictions.
 
     Args:
         results: dictionary
+        args: argparse.Namespace
+        stage: string
         unlabeled: boolean (if True, the gold_label must be present in the results)
 
     Returns:
-        acc: float (accuracy based on the majority label by iid)
-        acc2: float (accuracy based on the presence of at least one entailment label by iid)
-        aggregated_results: pandas.DataFrame (aggregated results by iid)
+        maj_acc: float (accuracy based on the majority label by iid)
+        alo_acc: float (accuracy based on the presence of at least one entailment label by iid)
 
     """
     keys_to_remove = [key for key in results.keys() if len(results[key]) == 0]
@@ -153,53 +155,59 @@ def compute_real_accuracy(results, unlabeled=False):
         raise ValueError("gold_label not found in results")
 
     results_df = pd.DataFrame(results)
+    _iids = results_df.iid.unique().tolist()
+
+    def get_itype(iid):
+        return results_df[results_df.iid == iid].itype.tolist()[0]
+
     # remove neutral labels
     results_df.drop([i for i, _ in results_df[results_df.predicted_label == 2].iterrows()], inplace=True)
+    maj_acc, alo_acc = None, None
+    grouped_results = results_df.groupby(['iid', 'trial']).aggregate(list).reset_index()
+    struct_maj = dict()
+    struct_alo = dict()
+    struct_glb = dict()
+    grouped_results['majority_label'] = [mode(row.predicted_label) for _, row in grouped_results.iterrows()]
+    grouped_results['at_least_one'] = [int(sum(row.predicted_label) > 0) for _, row in grouped_results.iterrows()]
 
-    aggregated_results = results_df.groupby('iid').aggregate(list).reset_index()
-    aggregated_results['majority_label'] = [mode(row.predicted_label) for _, row in aggregated_results.iterrows()]
-    aggregated_results['at_least_one'] = [int(sum(row.predicted_label) > 0) for _, row in aggregated_results.iterrows()]
-    acc, acc2 = None, None
+    for _iid in _iids:
+        maj_ = grouped_results[grouped_results.index == (_iid, 'Primary')].majority_label.tolist()[0]
+        alo_ = grouped_results[grouped_results.index == (_iid, 'Primary')].at_least_one.tolist()[0]
+        if get_itype(_iid) == 'Comparison':
+            maj_ = int(maj_ == 1 and grouped_results[grouped_results.index == (_iid, 'Secondary')]
+                       .majority_label.tolist()[0] == 1)
+            alo_ = int(alo_ == 1 and grouped_results[grouped_results.index == (_iid, 'Secondary')]
+                       .at_least_one.tolist()[0] == 1)
+
+        struct_maj[_iid] = maj_
+        struct_alo[_iid] = alo_
+        if not unlabeled:
+            struct_glb[_iid] = grouped_results[grouped_results.index == (_iid, 'Primary')].gold_label.tolist()[0]
+
     if not unlabeled:
-        aggregated_results['gold_label'] = [mode(row.gold_label) for _, row in aggregated_results.iterrows()]
-        acc = accuracy_score(aggregated_results['gold_label'], aggregated_results['majority_label'])
-        acc2 = accuracy_score(aggregated_results['gold_label'], aggregated_results['at_least_one'])
-    return acc, acc2, aggregated_results
+        maj_acc = accuracy_score(struct_glb.values(), struct_maj.values())
+        alo_acc = accuracy_score(struct_glb.values(), struct_alo.values())
+
+    generate_results_file(struct_maj, args, 'maj_{}_'.format(stage))
+    generate_results_file(struct_alo, args, 'alo_{}_'.format(stage))
+
+    return maj_acc, alo_acc, grouped_results
 
 
-def generate_results_file(results_dataframe, args, prefixes=['majority_', 'at_least_one_']):
-    """
-    Outputs results file for SemEval-2023 Task 7.
-    Args:
-        results_dataframe: pandas.DataFrame (aggregated results by iid)
-        args: argparse.Namespace (arguments)
-        prefixes: list (prefixes for the output files - default: ['majority_', 'at_least_one_'])
+def generate_results_file(struct, args, prefix):
+    filename_ = 'results.json'
+    for key in struct.keys():
+        struct[key] = {'Prediction': 'Contradiction' if struct[key] == 0 else 'Entailment'}
 
-    Returns:
+    with open(filename_, 'w') as file_:
+        json.dump(struct, file_, indent=4)
 
-    """
-    majority_results = {}
-    at_least_one_results = {}
-    for i, row in results_dataframe.iterrows():
-        majority_results[str(row.iid)] = {'Prediction': 'Contradiction' if row['majority_label'] == 0 else 'Entailment'}
-        at_least_one_results[str(row.iid)] = {'Prediction': 'Contradiction' if row['at_least_one'] == 0 else 'Entailment'}
+    output_file = os.path.join(args.save_folder, prefix + datetime.now().strftime("%Y%m%d_%H%M%S_%f") + '.zip')
+    with ZipFile(output_file, 'w') as zipObj:
+        zipObj.write(filename_)
 
-    compress_results(majority_results, args, prefix=prefixes[0])
-    compress_results(at_least_one_results, args, prefix=prefixes[1])
-
-
-def compress_results(content, args, prefix='majority_'):
-    filename = 'results.json'
-    with open(filename, "w") as json_file:
-        json_file.write(json.dumps(content, indent=4))
-
-    base_name = args.model_name.replace('.', '_')
-    output_file = os.path.join(args.save_folder, prefix + base_name + '.zip')
-    with ZipFile(output_file, mode='w') as zipObj:
-        zipObj.write(filename)
-
-    os.unlink(filename)
-    print("Files %s and %s created." % (filename, output_file))
+    os.unlink(filename_)
+    print("Files %s create inside of the file: %s." % (filename_, output_file))
 
 
 def get_dataframes(dataset, data_folder, num_classes):

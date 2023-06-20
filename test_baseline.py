@@ -57,18 +57,22 @@ def main_worker(args):
 
     results, accuracy = test_biomed_roberta(_loader, classifier, args, extra=(iids, trials, orders, genres, unlabeled))
 
-    _, _, _agg_results = compute_real_accuracy(results, unlabeled=unlabeled)
+    if evaluate_dataset == 'nli4ct':
+        _, _, grouped_df = compute_real_accuracy(results, args, stage, unlabeled=unlabeled)
 
-    # save results in pickle file
-    with open(args.save_folder + '/test_results_' + args.model_name + '.pkl', 'wb') as f:
+        # save grouped_df in pickle file for further analysis (nli4ct only)
+        with open(args.save_folder + '/{}_{}_{}_grouped_df.pkl'.format(evaluate_dataset,
+                                                                       stage, args.model_name), 'wb') as f:
+            pickle.dump(grouped_df, f)
+
+    # anyway lets save the raw results in a pickle file
+    with open(args.save_folder + '/{}_{}_{}_result.pkl'.format(evaluate_dataset, stage, args.model_name), 'wb') as f:
         pickle.dump(results, f)
 
     if accuracy is not None:
         print("Test accuracy of the model: {:2.3}".format(accuracy))
     else:
         print("Test accuracy of the model: N/A")
-
-    generate_results_file(_agg_results, args, prefixes=['test_majority_', 'test_at_least_one_'])
 
 
 if __name__ == '__main__':
