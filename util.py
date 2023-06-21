@@ -185,8 +185,8 @@ def compute_real_accuracy(results, args, stage, unlabeled=False):
             struct_glb[_iid] = mode(grouped_results[grouped_results.index == (_iid, 'Primary')].gold_label.tolist()[0])
 
     if not unlabeled:
-        maj_acc = accuracy_score(struct_glb.values(), struct_maj.values())
-        alo_acc = accuracy_score(struct_glb.values(), struct_alo.values())
+        maj_acc = accuracy_score(list(struct_glb.values()), list(struct_maj.values()))
+        alo_acc = accuracy_score(list(struct_glb.values()), list(struct_alo.values()))
 
     generate_results_file(struct_maj, args, 'maj_{}_'.format(stage))
     generate_results_file(struct_alo, args, 'alo_{}_'.format(stage))
