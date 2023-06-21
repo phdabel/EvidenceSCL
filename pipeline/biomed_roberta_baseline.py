@@ -23,9 +23,9 @@ def train(dataloader, model, criterion, optimizer, scheduler, epoch, args, extra
 
     res = create_metrics_dict()
 
-    iid_list, trial_list, order_list, genre_list = None, None, None, None
+    iid_list, trial_list, order_list, genre_list, types_list = None, None, None, None, None
     if extra_info is not None:
-        iid_list, trial_list, order_list, genre_list = extra_info
+        iid_list, trial_list, order_list, genre_list, types_list = extra_info
 
     l1_criterion = nn.L1Loss()
     model.train()
@@ -46,8 +46,8 @@ def train(dataloader, model, criterion, optimizer, scheduler, epoch, args, extra
         # add metrics to res dictionary
         add_metrics(dataset_name=args.dataset, bash_size=bsz, batch_index=idx, iid_list=iid_list,
                     predicted_labels=predicted_labels, true_labels=true_labels, res=res, logits=None,
-                    order_list=order_list, trial_list=trial_list, genres_list=genre_list, unlabeled=False,
-                    predicted_evidence=None, gold_evidence_label=None)
+                    order_list=order_list, trial_list=trial_list, itype_list=types_list, genres_list=genre_list,
+                    unlabeled=False, predicted_evidence=None, gold_evidence_label=None)
 
         loss = criterion(predicted_labels, true_labels)
         # L1 regularization
@@ -95,9 +95,9 @@ def validate(dataloader, model, criterion, epoch, args, extra_info=None):
 
     res = create_metrics_dict()
 
-    iid_list, trial_list, order_list, genre_list = None, None, None, None
+    iid_list, trial_list, order_list, genre_list, types_list = None, None, None, None, None
     if extra_info is not None:
-        iid_list, trial_list, order_list, genre_list = extra_info
+        iid_list, trial_list, order_list, genre_list, types_list = extra_info
 
     model.eval()
     with torch.no_grad():
@@ -119,7 +119,7 @@ def validate(dataloader, model, criterion, epoch, args, extra_info=None):
             # add metrics to res dictionary
             add_metrics(dataset_name=args.dataset, bash_size=bsz, batch_index=idx, iid_list=iid_list,
                         predicted_labels=predicted_labels, true_labels=true_labels, res=res, logits=None,
-                        order_list=order_list, trial_list=trial_list, genres_list=genre_list, unlabeled=False,
+                        order_list=order_list, trial_list=trial_list, itype_list=types_list, genres_list=genre_list, unlabeled=False,
                         predicted_evidence=None, gold_evidence_label=None)
 
             loss = criterion(predicted_labels, true_labels)

@@ -301,6 +301,7 @@ def get_dataset_from_dataframe(dataframe, tokenizer, max_seq_length: Optional[in
 
     all_iid = [row.iid for _, row in dataframe.iterrows()]
     all_uuids = [row.uuid for _, row in dataframe.iterrows()]
+    all_types = [row.itype for _, row in dataframe.iterrows()] if 'itype' in dataframe.columns else None
     all_trials = [row.trial for _, row in dataframe.iterrows()] if 'trial' in dataframe.columns else None
     all_orders = [row.order_ for _, row in dataframe.iterrows()] if 'order_' in dataframe.columns else None
     all_genres = [row.genre for _, row in dataframe.iterrows()] if 'genre' in dataframe.columns else None
@@ -311,7 +312,7 @@ def get_dataset_from_dataframe(dataframe, tokenizer, max_seq_length: Optional[in
                             class_labels,
                             evidence_labels)
 
-    return dataset, all_uuids, all_iid, all_trials, all_orders, all_genres
+    return dataset, all_uuids, all_iid, all_trials, all_orders, all_genres, all_types
 
 
 def get_dataloaders(dataset, data_folder, tokenizer, batch_size, workers, max_seq_length, num_classes):
@@ -331,13 +332,12 @@ def get_dataloaders(dataset, data_folder, tokenizer, batch_size, workers, max_se
     """
     # Obtain dataloaders
     train_df, val_df, test_df = get_dataframes(dataset, data_folder, num_classes)
-    train_dataset, _, train_iids, train_trials, train_orders, train_genres = get_dataset_from_dataframe(train_df,
-                                                                                                        tokenizer,
-                                                                                                        max_seq_length)
-    validate_dataset, _, validation_iids, validation_trials, validation_orders, validation_genres = \
+    train_dataset, _, train_iids, train_trials, train_orders, train_genres, train_types = get_dataset_from_dataframe(
+        train_df, tokenizer, max_seq_length)
+    validate_dataset, _, validation_iids, validation_trials, validation_orders, validation_genres, validation_types = \
         get_dataset_from_dataframe(val_df, tokenizer, max_seq_length)
 
-    test_dataset, _, test_iids, test_trials, test_orders, test_genres = \
+    test_dataset, _, test_iids, test_trials, test_orders, test_genres, test_types = \
         get_dataset_from_dataframe(test_df, tokenizer, max_seq_length, unlabeled=dataset == 'nli4ct')
 
     training_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False,
@@ -365,7 +365,11 @@ def get_dataloaders(dataset, data_folder, tokenizer, batch_size, workers, max_se
             'genres': {
                 'training': train_genres,
                 'validation': validation_genres,
-                'test': test_genres}
+                'test': test_genres},
+            'types': {
+                'training': train_types,
+                'validation': validation_types,
+                'test': test_types}
             }
 
 
@@ -402,7 +406,8 @@ def get_dataloader(data_folder, dataset_name, filename, tokenizer, batch_size, w
         the sentence order list.
     """
     dataset_df = get_dataframe(data_folder, dataset_name, filename)
-    dataset, _, iids, trials, orders, genres = get_dataset_from_dataframe(dataset_df, tokenizer, max_seq_length, unlabeled)
+    dataset, _, iids, trials, orders, genres, types = get_dataset_from_dataframe(dataset_df, tokenizer, max_seq_length,
+                                                                                 unlabeled)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=workers, pin_memory=True)
 
     return dataloader, iids, trials, orders, genres

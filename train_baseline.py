@@ -53,11 +53,13 @@ def main_worker(gpu, args):
     train_trials = dataloader_struct['trials']['training']
     train_orders = dataloader_struct['orders']['training']
     train_genres = dataloader_struct['genres']['training']
+    train_types = dataloader_struct['types']['training']
 
     val_iids = dataloader_struct['iids']['validation']
     val_trials = dataloader_struct['trials']['validation']
     val_orders = dataloader_struct['orders']['validation']
     val_genres = dataloader_struct['genres']['validation']
+    val_types = dataloader_struct['types']['validation']
 
     epoch, val_semeval_acc, train_agg_results = None, None, None
     for epoch in range(args.epochs):
@@ -67,7 +69,8 @@ def main_worker(gpu, args):
                                                             extra_info=(train_iids,
                                                                         train_trials,
                                                                         train_orders,
-                                                                        train_genres))
+                                                                        train_genres,
+                                                                        train_types))
         time2 = time.time()
         print('Training epoch {}, total time {:.2f}, loss {:.7f}'.format(epoch, (time2 - time1), train_loss))
 
@@ -76,7 +79,8 @@ def main_worker(gpu, args):
                                                          extra_info=(val_iids,
                                                                      val_trials,
                                                                      val_orders,
-                                                                     val_genres))
+                                                                     val_genres,
+                                                                     val_types))
         val_time2 = time.time()
         print('Validation epoch {}, total time {:.2f}, loss {:.7f}'.format(epoch, (val_time2 - val_time1),
                                                                            val_loss))

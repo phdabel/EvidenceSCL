@@ -18,7 +18,7 @@ def run_classifier_test(dataloader, classifier, args, extra=None):
 
     Returns:
     """
-    iids, trials, sentence_orders, genre_list, unlabeled = extra
+    iids, trials, sentence_orders, genre_list, unlabeled, types = extra
     batch_time = AverageMeter('Time', ':6.3f')
     top = AverageMeter('Accuracy', ':1.3f')
     progress = ProgressMeter(
@@ -48,7 +48,7 @@ def run_classifier_test(dataloader, classifier, args, extra=None):
             evaluate_dataset = args.evaluate_dataset if args.evaluate_dataset is not None else args.dataset
 
             add_metrics(evaluate_dataset, bsz, idx, iids, predicted_labels, true_labels, res, logits, sentence_orders,
-                        trials, genre_list, unlabeled=unlabeled)
+                        trials, types, genre_list, unlabeled=unlabeled)
 
             if extra is not None and not unlabeled:
                 acc = accuracy_score(true_labels.cpu().numpy(), predicted_labels.argmax(1).cpu().numpy())

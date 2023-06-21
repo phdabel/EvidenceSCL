@@ -53,9 +53,12 @@ def main_worker(args):
     trials = dataloader_struct['trials'][stage]
     orders = dataloader_struct['orders'][stage]
     genres = dataloader_struct['genres'][stage]
+    types = dataloader_struct['types'][stage]
     unlabeled = True if evaluate_dataset == 'nli4ct' and stage == 'test' else False
 
-    results, accuracy = test_biomed_roberta(_loader, classifier, args, extra=(iids, trials, orders, genres, unlabeled))
+    results, accuracy = test_biomed_roberta(_loader, classifier, args, extra=(iids, trials, orders, genres,
+                                                                              unlabeled,
+                                                                              types))
 
     if evaluate_dataset == 'nli4ct':
         _, _, grouped_df = compute_real_accuracy(results, args, stage, unlabeled=unlabeled)

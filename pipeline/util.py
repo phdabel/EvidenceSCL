@@ -81,6 +81,7 @@ def create_metrics_dict():
     return {"iid": [],
             "predicted_label": [],
             "trial": [],
+            "itype": [],
             "genre": [],
             "order_": [],
             "gold_label": [],
@@ -90,8 +91,8 @@ def create_metrics_dict():
 
 
 def add_metrics(dataset_name, bash_size, batch_index, iid_list, predicted_labels, true_labels, res, logits=None,
-                order_list=None, trial_list=None, genres_list=None, unlabeled=False, predicted_evidence=None,
-                gold_evidence_label=None):
+                order_list=None, trial_list=None, itype_list=None, genres_list=None, unlabeled=False,
+                predicted_evidence=None, gold_evidence_label=None):
     """
     Add metrics to the res dictionary.
 
@@ -109,6 +110,7 @@ def add_metrics(dataset_name, bash_size, batch_index, iid_list, predicted_labels
         res: dict
         order_list: list
         trial_list: list
+        itype_list: list
         unlabeled: bool
 
     Returns:
@@ -130,5 +132,6 @@ def add_metrics(dataset_name, bash_size, batch_index, iid_list, predicted_labels
     if dataset_name == "nli4ct":
         res["trial"] += trial_list[offset:offset + bash_size]
         res["order_"] += order_list[offset:offset + bash_size]
+        res["itype"] += itype_list[offset:offset + bash_size]
     elif dataset_name == 'multinli':
         res["genre"] += genres_list[offset:offset + bash_size]
