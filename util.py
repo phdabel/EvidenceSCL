@@ -182,7 +182,7 @@ def compute_real_accuracy(results, args, stage, unlabeled=False):
         struct_maj[_iid] = maj_
         struct_alo[_iid] = alo_
         if not unlabeled:
-            struct_glb[_iid] = grouped_results[grouped_results.index == (_iid, 'Primary')].gold_label.tolist()[0]
+            struct_glb[_iid] = mode(grouped_results[grouped_results.index == (_iid, 'Primary')].gold_label.tolist()[0])
 
     if not unlabeled:
         maj_acc = accuracy_score(struct_glb.values(), struct_maj.values())
