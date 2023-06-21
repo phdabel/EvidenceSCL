@@ -19,7 +19,7 @@ do
       do
         for stage in "validation" "test"
         do
-          echo "Dataset: $dataset, learning rate $learning_rate, $num_classes classes and $max_seq_length max_seq_length"
+          echo "Dataset: $dataset, learning rate $learning_rate, $num_classes classes and $max_seq_length max_seq_length and stage $stage"
           python test_baseline.py --dataset "$dataset" --evaluate_stage "$stage" --max_seq_length "$max_seq_length" --num_classes "$num_classes" --model_name biomed --batch_size "$BATCH_SIZE" --gradient_accumulation_steps "$GRADIENT_ACCUMULATION_STEPS" --epochs "$EPOCHS"  --workers "$WORKERS" --learning_rate "$learning_rate"
         done
       done
