@@ -163,7 +163,7 @@ def compute_real_accuracy(results, args, stage, unlabeled=False):
     # remove neutral labels
     results_df.drop([i for i, _ in results_df[results_df.predicted_label == 2].iterrows()], inplace=True)
     maj_acc, alo_acc = None, None
-    grouped_results = results_df.groupby(['iid', 'trial']).aggregate(list).reset_index()
+    grouped_results = results_df.groupby(['iid', 'trial']).aggregate(list)
     struct_maj = dict()
     struct_alo = dict()
     struct_glb = dict()
