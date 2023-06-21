@@ -43,7 +43,7 @@ def main_worker(args):
 
     # load test data
     evaluate_dataset = args.evaluate_dataset if args.evaluate_dataset is not None else args.dataset
-    stage = args.dataset_stage
+    stage = args.evaluate_stage
 
     dataloader_struct = get_dataloaders(evaluate_dataset, args.data_folder, tokenizer, args.batch_size, args.workers,
                                         args.max_seq_length, args.num_classes)
