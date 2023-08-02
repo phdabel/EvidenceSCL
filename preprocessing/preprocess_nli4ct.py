@@ -82,6 +82,8 @@ def __append_instance__(dict_struct, __uuid, row, test=False):
     dict_struct['iid'].append(row.iid)
     dict_struct['itype'].append(row.itype)
     dict_struct['rct'].append(row.rct)
+    dict_struct['section'].append(row.premise_section)
+    dict_struct['evidence_section'].append(row.evidence_section)
     dict_struct['trial'].append(row.trial)
     dict_struct['premise'].append(row.premises)
     dict_struct['hypothesis'].append(row.hypotheses)
@@ -94,19 +96,22 @@ def __append_instance__(dict_struct, __uuid, row, test=False):
         dict_struct['class_label'].append(None)
 
 
-def prepare_two_labeled_dataset(nli4ct_df):
-    common_criteria = '(evidence_label == 1)'
+def prepare_two_labeled_dataset(nli4ct_df, task=None):
+
+    common_criteria = '(1 == 1)'
+    if task is not None and task == 'nli':
+        common_criteria = '(evidence_label == 1)'
     criteria_ = "(rct == @rct_ & evidence_section == @section_a & two_labeled_class != @label_a & order_ == @order_a)"
     query = "%s & %s" % (common_criteria, criteria_)
 
-    nli4ct_instances = dict(uuid=list(), iid=list(), itype=list(), rct=list(), trial=list(), premise=list(),
-                            hypothesis=list(), order_=list(), evidence_label=list(), class_label=list())
-    no_neg_nli4ct_instances = dict(uuid=list(), iid=list(), itype=list(), rct=list(), trial=list(), premise=list(),
-                                   hypothesis=list(), order_=list(), evidence_label=list(), class_label=list())
+    nli4ct_instances = dict(uuid=list(), iid=list(), itype=list(), rct=list(), section=list(), evidence_section=list(),
+                            trial=list(), premise=list(), hypothesis=list(), order_=list(), evidence_label=list(), class_label=list())
+    no_neg_nli4ct_instances = dict(uuid=list(), iid=list(), itype=list(), rct=list(), section=list(), evidence_section=list(),
+                                   trial=list(), premise=list(), hypothesis=list(), order_=list(), evidence_label=list(), class_label=list())
 
     for iid in nli4ct_df.iid.unique():
         uuid_ = uuid.uuid1()
-        only_evidence = nli4ct_df.evidence_label == 1
+        only_evidence = True if task is not None and task == 'ir' else nli4ct_df.evidence_label == 1
         # Sample A is obtained from iid
         sample_a = nli4ct_df[(nli4ct_df.iid == iid) & only_evidence]
         section_a = sample_a.evidence_section.unique()[0]
@@ -124,7 +129,10 @@ def prepare_two_labeled_dataset(nli4ct_df):
                 # if there are more than one we prioritize instances with the same value for the `trial`
                 # column (Primary|Secondary)
                 __append_instance__(nli4ct_instances, uuid_, row_)
-                __append_instance__(nli4ct_instances, uuid_, neg_sample.query('trial == @row_.trial').iloc[0])
+                try:
+                    __append_instance__(nli4ct_instances, uuid_, neg_sample.query('trial == @row_.trial').iloc[0])
+                except IndexError:
+                    __append_instance__(nli4ct_instances, uuid_, neg_sample.iloc[0])
             else:
                 # otherwise we save instances with no negative samples in a separated structure
                 __append_instance__(no_neg_nli4ct_instances, uuid_, row_)
@@ -135,8 +143,9 @@ def prepare_two_labeled_dataset(nli4ct_df):
 
 
 def prepare_unlabeled_testing_data(nli4ct_test_df):
-    nli4ct_instances = dict(uuid=list(), iid=list(), itype=list(), rct=list(), trial=list(), premise=list(),
-                            hypothesis=list(), order_=list(), evidence_label=list(), class_label=list())
+    nli4ct_instances = dict(uuid=list(), iid=list(), itype=list(), rct=list(), section=list(), evidence_section=list(),
+                            trial=list(), premise=list(), hypothesis=list(), order_=list(), evidence_label=list(),
+                            class_label=list())
 
     for i, row_ in nli4ct_test_df.sort_values(by=['iid', 'rct', 'order_']).iterrows():
         __append_instance__(nli4ct_instances, uuid.uuid1(), row_, test=True)
@@ -144,7 +153,7 @@ def prepare_unlabeled_testing_data(nli4ct_test_df):
     return pd.DataFrame(nli4ct_instances)
 
 
-def preprocess_data(input_dir, target_dir):
+def preprocess_data(input_dir, target_dir, task=None):
 
     if not os.path.exists(target_dir):
         os.makedirs(target_dir)
@@ -158,12 +167,12 @@ def preprocess_data(input_dir, target_dir):
         elif fnmatch.fnmatch(file_, '*dev*'):
             dev_file = os.path.join(input_dir, file_)
 
-    nli4ct_train_df, invalid_nli4ct_train_df = prepare_two_labeled_dataset(get_nli4ct(train_file))
-    nli4ct_val_df, invalid_nli4ct_val_df = prepare_two_labeled_dataset(get_nli4ct(dev_file))
+    nli4ct_train_df, invalid_nli4ct_train_df = prepare_two_labeled_dataset(get_nli4ct(train_file), task=task)
+    nli4ct_val_df, invalid_nli4ct_val_df = prepare_two_labeled_dataset(get_nli4ct(dev_file), task=task)
     nli4ct_test_df = prepare_unlabeled_testing_data(get_nli4ct(test_file, test=True))
 
-    nli4ct_train_df.to_pickle(os.path.join(target_dir, 'nli4ct_2L_train.pkl'))
-    nli4ct_val_df.to_pickle(os.path.join(target_dir, 'nli4ct_2L_val.pkl'))
+    nli4ct_train_df.to_pickle(os.path.join(target_dir, 'nli4ct_2L_{}_train.pkl'.format(task)))
+    nli4ct_val_df.to_pickle(os.path.join(target_dir, 'nli4ct_2L_{}_val.pkl'.format(task)))
     invalid_nli4ct_train_df.to_pickle(os.path.join(target_dir, 'invalid_nli4ct_2L_train.pkl'))
     invalid_nli4ct_val_df.to_pickle(os.path.join(target_dir, 'invalid_nli4ct_2L_val.pkl'))
     nli4ct_test_df.to_pickle(os.path.join(target_dir, 'nli4ct_2L_test.pkl'))
@@ -175,6 +184,7 @@ def get_args():
                         help='Path to the directory containing the raw NLI4CT dataset.')
     parser.add_argument('--target_dir', type=str, default=os.path.join('../datasets/preprocessed/nli4ct'),
                         help='Path to the directory where the preprocessed NLI4CT dataset will be stored.')
+    parser.add_argument('--task', type=str, default='nli', choices=['nli', 'ir'])
 
     __args = parser.parse_args()
 
@@ -186,5 +196,5 @@ def get_args():
 
 if __name__ == '__main__':
     args = get_args()
-    preprocess_data(args.input_dir, args.target_dir)
+    preprocess_data(args.input_dir, args.target_dir, args.task)
     sys.exit(0)
