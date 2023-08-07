@@ -210,6 +210,72 @@ def generate_results_file(struct, args, prefix):
     print("Files %s create inside of the file: %s." % (filename_, output_file))
 
 
+def build_evaluation_file(results, args):
+
+    filename_ = 'results.json'
+    keys_to_remove = [key for key in results.keys() if len(results[key]) == 0]
+    for key in keys_to_remove:
+        del results[key]
+
+    results_df = pd.DataFrame(results)
+    _iids = results_df.iid.unique().tolist()
+
+    order_combined_df = results_df.groupby(['iid', 'predicted_label', 'trial'])['order_'].agg(list)
+    grouped_results = results_df.groupby(['iid', 'trial']).agg(list)
+
+    res = {}
+    for _iid in _iids:
+        if _get_itype(_iid, results_df) == 'Comparison':
+            if _evidence_exists(_iid, results_df):
+                primary_response = filter_order(order_combined_df[_iid][1]['Primary']) if _primary_key_exists(_iid, results_df) else []
+                secondary_response = filter_order(order_combined_df[_iid][1]['Secondary']) if _secondary_key_exists(_iid, results_df) else []
+            else:
+                primary_response = []
+                secondary_response = []
+                res[_iid] = {'Primary_evidence_index': primary_response, 'Secondary_evidence_index': secondary_response}
+        else:
+            if _evidence_exists(_iid):
+                primary_response = filter_order(order_combined_df[_iid][1]['Primary']) if _primary_key_exists(_iid, results_df) else []
+            else:
+                primary_response = []
+
+        res[_iid] = {'Primary_evidence_index': primary_response}
+
+    with open(filename_, 'w') as file_:
+        json.dump(res, file_, indent=4)
+
+    output_file = os.path.join(args.save_folder, datetime.now().strftime("%Y%m%d_%H%M%S_%f") + '.zip')
+    with ZipFile(output_file, 'w') as zipObj:
+        zipObj.write(filename_)
+    
+    os.unlink(filename_)
+    print("Files %s create inside of the file: %s." % (filename_, output_file))
+
+    return grouped_results
+
+def filter_order(order_list):
+  filtered_list = []
+  order_ = order_list
+  for i, value in enumerate(order_):
+    if value <= order_[i-1] and i > 0:
+      return filtered_list
+    else:
+      filtered_list.append(value)
+  return filtered_list
+
+def _evidence_exists(iid, results_df):
+  return any(results_df[results_df.iid == iid].predicted_label.tolist()) == 1
+
+def _get_itype(iid, results_df):
+  return results_df[results_df.iid == iid].itype.tolist()[0]
+
+def _primary_key_exists(iid, results_df):
+  return 'Primary' in results_df[results_df.iid == iid][results_df.predicted_label == 1].trial.tolist()
+
+def _secondary_key_exists(iid, results_df):
+  return 'Secondary' in results_df[results_df.iid == iid][results_df.predicted_label == 1].trial.tolist()
+
+
 def get_dataframes(dataset, data_folder, num_classes):
     train_df, val_df, test_df = None, None, None
     if dataset == 'nli4ct':
