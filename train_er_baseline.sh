@@ -14,6 +14,6 @@ do
   for max_seq_length in 128 512
   do
     echo "Dataset: nli4ct, learning rate $learning_rate, $num_classes 2 and $max_seq_length max_seq_length"
-    python test_er_baseline.py --dataset nli4ct --max_seq_length "$max_seq_length" --num_classes 2 --model_name biomed --batch_size "$BATCH_SIZE" --gradient_accumulation_steps "$GRADIENT_ACCUMULATION_STEPS" --epochs "$EPOCHS"  --workers "$WORKERS" --learning_rate "$learning_rate" --evidence_retrieval
+    python train_baseline.py --dataset nli4ct --max_seq_length "$max_seq_length" --num_classes 2 --model_name biomed --batch_size "$BATCH_SIZE" --gradient_accumulation_steps "$GRADIENT_ACCUMULATION_STEPS" --epochs "$EPOCHS"  --workers "$WORKERS" --learning_rate "$learning_rate" --evidence_retrieval
   done
 done
