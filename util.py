@@ -116,7 +116,7 @@ def parse_option():
     args.start_epoch = 0
     args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    args.task = 'nli' if args.evidence_retrieval else 'ir'
+    args.task = 'ir' if args.evidence_retrieval else 'nli'
     print("Current task: {}".format(args.task))
 
     if args.combine and not args.encoder_ckpt:
