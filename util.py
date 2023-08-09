@@ -116,7 +116,8 @@ def parse_option():
     args.start_epoch = 0
     args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    args.task = 'nli' if args.evidence_retrieval else 'ir'
+    args.task = 'ir' if args.evidence_retrieval else 'nli'
+    print("Current task: {}".format(args.task))
 
     if args.combine and not args.encoder_ckpt:
         raise ValueError("When combining datasets, the encoder checkpoint from the pre-trained model must be informed.")
@@ -308,11 +309,13 @@ def get_dataframes(dataset, data_folder, num_classes, task='nli'):
     train_df, val_df, test_df = None, None, None
     if dataset == 'nli4ct' and task == 'nli':
         # NLI4CT dataset uses 2 labels even though the model has 3 classes
+        print("Loading NLI Dataset")
         train_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', "nli4ct_2L_train.pkl"))
         val_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', "nli4ct_2L_val.pkl"))
         test_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', 'nli4ct_2L_test.pkl'))
     elif dataset == 'nli4ct' and task == 'ir':
         # NLI4CT dataset uses 2 labels even though the model has 3 classes
+        print("Loading Evidence Retrieval Dataset")
         train_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', "nli4ct_2L_ir_train.pkl"))
         val_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', "nli4ct_2L_ir_val.pkl"))
         test_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', 'nli4ct_2L_test.pkl'))
