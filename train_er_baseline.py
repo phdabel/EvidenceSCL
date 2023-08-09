@@ -44,7 +44,7 @@ def main_worker(gpu, args):
     scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=5)
 
     dataloader_struct = get_dataloaders(args.dataset, args.data_folder, tokenizer, args.batch_size, args.workers,
-                                        args.max_seq_length, args.num_classes)
+                                        args.max_seq_length, args.num_classes, task=args.task)
 
     training_loader = dataloader_struct['loader']['training']
     validation_loader = dataloader_struct['loader']['validation']

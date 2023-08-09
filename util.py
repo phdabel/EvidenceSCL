@@ -116,6 +116,8 @@ def parse_option():
     args.start_epoch = 0
     args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    args.task = 'nli' if args.evidence_retrieval else 'ir'
+
     if args.combine and not args.encoder_ckpt:
         raise ValueError("When combining datasets, the encoder checkpoint from the pre-trained model must be informed.")
 
@@ -210,7 +212,18 @@ def generate_results_file(struct, args, prefix):
     print("Files %s create inside of the file: %s." % (filename_, output_file))
 
 
-def build_evaluation_file(results, args):
+def build_evaluation_file(results, args, stage: str, unlabeled=False):
+    """
+    Build the evaluation file for SemEval-2023 Task 7 - Subtask 2 - Evidence Retrieval Task.
+    Args:
+        results:
+        args:
+        stage:
+        unlabeled:
+
+    Returns:
+
+    """
 
     filename_ = 'results.json'
 
@@ -218,16 +231,16 @@ def build_evaluation_file(results, args):
     for key in keys_to_remove:
         del results[key]
 
-    if 'gold_label' not in results.keys():
-        raise ValueError("gold_label not found in results")
+    if not unlabeled and 'gold_evidence_label' not in results.keys():
+        raise ValueError("gold_evidence_label not found in results")
     
-    predicted_labels = results['predicted_label']
-    gold_labels = results['gold_label']
+    predicted_labels = results['predicted_evidence']
+    gold_labels = results['gold_evidence_label']
 
     results_df = pd.DataFrame(results)
     _iids = results_df.iid.unique().tolist()
 
-    order_combined_df = results_df.groupby(['iid', 'predicted_label', 'trial'])['order_'].agg(list)
+    order_combined_df = results_df.groupby(['iid', 'predicted_evidence', 'trial'])['order_'].agg(list)
     grouped_results = results_df.groupby(['iid', 'trial']).agg(list)
 
     res = {}
@@ -239,7 +252,8 @@ def build_evaluation_file(results, args):
             else:
                 primary_response = []
                 secondary_response = []
-                res[_iid] = {'Primary_evidence_index': primary_response, 'Secondary_evidence_index': secondary_response}
+
+            res[_iid] = {'Primary_evidence_index': primary_response, 'Secondary_evidence_index': secondary_response}
         else:
             if _evidence_exists(_iid, results_df):
                 primary_response = filter_order(order_combined_df[_iid][1]['Primary']) if _primary_key_exists(_iid, results_df) else []
@@ -248,12 +262,12 @@ def build_evaluation_file(results, args):
 
         res[_iid] = {'Primary_evidence_index': primary_response}
 
-    acc = accuracy_score(predicted_labels, gold_labels)
+    acc = None if unlabeled else accuracy_score(predicted_labels, gold_labels)
 
     with open(filename_, 'w') as file_:
         json.dump(res, file_, indent=4)
 
-    output_file = os.path.join(args.save_folder, datetime.now().strftime("%Y%m%d_%H%M%S_%f") + '.zip')
+    output_file = os.path.join(args.save_folder, "_{}_".format(stage) + datetime.now().strftime("%Y%m%d_%H%M%S_%f") + '.zip')
     with ZipFile(output_file, 'w') as zipObj:
         zipObj.write(filename_)
     
@@ -261,6 +275,7 @@ def build_evaluation_file(results, args):
     print("Files %s create inside of the file: %s." % (filename_, output_file))
 
     return grouped_results, acc
+
 
 def filter_order(order_list):
   filtered_list = []
@@ -272,25 +287,34 @@ def filter_order(order_list):
       filtered_list.append(value)
   return filtered_list
 
+
 def _evidence_exists(iid, results_df):
-  return any(results_df[results_df.iid == iid].predicted_label.tolist()) == 1
+  return any(results_df[results_df.iid == iid].predicted_evidence.tolist()) == 1
+
 
 def _get_itype(iid, results_df):
   return results_df[results_df.iid == iid].itype.tolist()[0]
 
+
 def _primary_key_exists(iid, results_df):
-  return 'Primary' in results_df[results_df.iid == iid][results_df.predicted_label == 1].trial.tolist()
+  return 'Primary' in results_df[results_df.iid == iid][results_df.predicted_evidence == 1].trial.tolist()
+
 
 def _secondary_key_exists(iid, results_df):
-  return 'Secondary' in results_df[results_df.iid == iid][results_df.predicted_label == 1].trial.tolist()
+  return 'Secondary' in results_df[results_df.iid == iid][results_df.predicted_evidence == 1].trial.tolist()
 
 
-def get_dataframes(dataset, data_folder, num_classes):
+def get_dataframes(dataset, data_folder, num_classes, task='nli'):
     train_df, val_df, test_df = None, None, None
-    if dataset == 'nli4ct':
+    if dataset == 'nli4ct' and task == 'nli':
         # NLI4CT dataset uses 2 labels even though the model has 3 classes
         train_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', "nli4ct_2L_train.pkl"))
         val_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', "nli4ct_2L_val.pkl"))
+        test_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', 'nli4ct_2L_test.pkl'))
+    elif dataset == 'nli4ct' and task == 'ir':
+        # NLI4CT dataset uses 2 labels even though the model has 3 classes
+        train_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', "nli4ct_2L_ir_train.pkl"))
+        val_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', "nli4ct_2L_ir_val.pkl"))
         test_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', 'nli4ct_2L_test.pkl'))
     elif dataset == 'mednli':
         train_df = pd.read_pickle(os.path.join(data_folder, 'mednli', "mednli_%dL_train.pkl" % num_classes))
@@ -390,7 +414,7 @@ def get_dataset_from_dataframe(dataframe, tokenizer, max_seq_length: Optional[in
     return dataset, all_uuids, all_iid, all_trials, all_orders, all_genres, all_types
 
 
-def get_dataloaders(dataset, data_folder, tokenizer, batch_size, workers, max_seq_length, num_classes):
+def get_dataloaders(dataset, data_folder, tokenizer, batch_size, workers, max_seq_length, num_classes, task='nli'):
     """
 
     Args:
@@ -401,12 +425,13 @@ def get_dataloaders(dataset, data_folder, tokenizer, batch_size, workers, max_se
         workers: int
         max_seq_length: int
         num_classes: int
+        task: string
 
     Returns: dict
         A dictionary containing dataloaders, iids, trials, orders, and genres for train, validation and test sets.
     """
     # Obtain dataloaders
-    train_df, val_df, test_df = get_dataframes(dataset, data_folder, num_classes)
+    train_df, val_df, test_df = get_dataframes(dataset, data_folder, num_classes, task=task)
     train_dataset, _, train_iids, train_trials, train_orders, train_genres, train_types = get_dataset_from_dataframe(
         train_df, tokenizer, max_seq_length)
     validate_dataset, _, validation_iids, validation_trials, validation_orders, validation_genres, validation_types = \
