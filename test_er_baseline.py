@@ -46,7 +46,7 @@ def main_worker(args):
     stage = args.evaluate_stage
 
     dataloader_struct = get_dataloaders(evaluate_dataset, args.data_folder, tokenizer, args.batch_size, args.workers,
-                                        args.max_seq_length, args.num_classes)
+                                        args.max_seq_length, args.num_classes, task=args.task)
 
     _loader = dataloader_struct['loader'][stage]
     iids = dataloader_struct['iids'][stage]
@@ -60,7 +60,7 @@ def main_worker(args):
                                                                               unlabeled,
                                                                               types))
     
-    grouped_df, acc = build_evaluation_file(results, args)
+    grouped_df, acc = build_evaluation_file(results, args, "test", unlabeled=True)
 
     with open(args.save_folder + '/{}_{}_{}_grouped_df.pkl'.format(evaluate_dataset,
                                                                    stage, args.model_name), 'wb') as f:
@@ -73,6 +73,7 @@ def main_worker(args):
         print("Test accuracy of the model: {:2.3}".format(accuracy))
     else:
         print("Test accuracy of the model: N/A")
+
 
 if __name__ == '__main__':
     __args = parse_option()

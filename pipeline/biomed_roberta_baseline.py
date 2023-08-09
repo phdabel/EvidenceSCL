@@ -37,17 +37,23 @@ def train(dataloader, model, criterion, optimizer, scheduler, epoch, args, extra
 
         inputs = {'input_ids': batch[0],
                   'attention_mask': batch[1],
-                  'labels': batch[3]}
+                  'labels': batch[3] if args.task != 'ir' else batch[4]}
 
         output = model(**inputs)
         predicted_labels = output[1].view(-1, args.num_classes)
-        true_labels = inputs['labels'].view(-1)
+        true_nli_labels = batch[3].view(-1)
+        true_er_labels = batch[4].view(-1)
+        true_labels = true_nli_labels if args.task != 'ir' else true_er_labels
 
         # add metrics to res dictionary
         add_metrics(dataset_name=args.dataset, bash_size=bsz, batch_index=idx, iid_list=iid_list,
-                    predicted_labels=predicted_labels, true_labels=true_labels, res=res, logits=None,
+                    predicted_labels=predicted_labels if args.task != 'ir' else None,
+                    true_labels=true_nli_labels,
+                    res=res, logits=None,
                     order_list=order_list, trial_list=trial_list, itype_list=types_list, genres_list=genre_list,
-                    unlabeled=False, predicted_evidence=None, gold_evidence_label=None)
+                    unlabeled=False,
+                    predicted_evidence=predicted_labels if args.task == 'ir' else None,
+                    gold_evidence_label=true_er_labels)
 
         loss = criterion(predicted_labels, true_labels)
         # L1 regularization
@@ -110,17 +116,23 @@ def validate(dataloader, model, criterion, epoch, args, extra_info=None):
 
             inputs = {'input_ids': batch[0],
                       'attention_mask': batch[1],
-                      'labels': batch[3]}
+                      'labels': batch[3] if args.task != 'ir' else batch[4]}
 
             output = model(**inputs)
             predicted_labels = output[1].view(-1, args.num_classes)
-            true_labels = batch[3].view(-1)
+            true_nli_labels = batch[3].view(-1)
+            true_er_labels = batch[4].view(-1)
+            true_labels = true_nli_labels if args.task != 'ir' else true_er_labels
 
             # add metrics to res dictionary
             add_metrics(dataset_name=args.dataset, bash_size=bsz, batch_index=idx, iid_list=iid_list,
-                        predicted_labels=predicted_labels, true_labels=true_labels, res=res, logits=None,
-                        order_list=order_list, trial_list=trial_list, itype_list=types_list, genres_list=genre_list, unlabeled=False,
-                        predicted_evidence=None, gold_evidence_label=None)
+                        predicted_labels=predicted_labels if args.task != 'ir' else None,
+                        true_labels=true_nli_labels,
+                        res=res, logits=None,
+                        order_list=order_list, trial_list=trial_list, itype_list=types_list, genres_list=genre_list,
+                        unlabeled=False,
+                        predicted_evidence=predicted_labels if args.task == 'ir' else None,
+                        gold_evidence_label=true_er_labels)
 
             loss = criterion(predicted_labels, true_labels)
 

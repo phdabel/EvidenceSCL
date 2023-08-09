@@ -42,14 +42,20 @@ def run_classifier_test(dataloader, classifier, args, extra=None):
             _, prediction = logits.topk(1, 1, True, True)
 
             predicted_labels = logits
-            true_labels = None if unlabeled else batch[3].view(-1)
+            true_nli_labels = None if unlabeled or args.task == 'ir' else batch[3].view(-1)
+            true_er_labels = None if unlabeled or args.task != 'ir' else batch[4].view(-1)
+            true_labels = None if unlabeled else true_nli_labels if args.task != 'ir' else true_er_labels
 
             # add metrics to res dictionary
             evaluate_dataset = args.evaluate_dataset if args.evaluate_dataset is not None else args.dataset
 
-            add_metrics(evaluate_dataset, bsz, idx, iids, predicted_labels, true_labels, res,
-                        logits=logits, order_list=sentence_orders, trial_list=trials, itype_list=types,
-                        genres_list=genre_list, unlabeled=unlabeled)
+            add_metrics(dataset_name=evaluate_dataset, bash_size=bsz, batch_index=idx, iid_list=iids,
+                        predicted_labels=predicted_labels if args.task != 'ir' else None,
+                        true_labels=true_nli_labels,
+                        res=res, logits=logits, order_list=sentence_orders, trial_list=trials, itype_list=types,
+                        genres_list=genre_list, unlabeled=unlabeled,
+                        predicted_evidence=predicted_labels if args.task == 'ir' else None,
+                        gold_evidence_label=true_er_labels)
 
             if extra is not None and not unlabeled:
                 acc = accuracy_score(true_labels.cpu().numpy(), predicted_labels.argmax(1).cpu().numpy())
