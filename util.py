@@ -213,9 +213,16 @@ def generate_results_file(struct, args, prefix):
 def build_evaluation_file(results, args):
 
     filename_ = 'results.json'
+
     keys_to_remove = [key for key in results.keys() if len(results[key]) == 0]
     for key in keys_to_remove:
         del results[key]
+
+    if 'gold_label' not in results.keys():
+        raise ValueError("gold_label not found in results")
+    
+    predicted_labels = results['predicted_label']
+    gold_labels = results['gold_label']
 
     results_df = pd.DataFrame(results)
     _iids = results_df.iid.unique().tolist()
@@ -234,12 +241,14 @@ def build_evaluation_file(results, args):
                 secondary_response = []
                 res[_iid] = {'Primary_evidence_index': primary_response, 'Secondary_evidence_index': secondary_response}
         else:
-            if _evidence_exists(_iid):
+            if _evidence_exists(_iid, results_df):
                 primary_response = filter_order(order_combined_df[_iid][1]['Primary']) if _primary_key_exists(_iid, results_df) else []
             else:
                 primary_response = []
 
         res[_iid] = {'Primary_evidence_index': primary_response}
+
+    acc = accuracy_score(predicted_labels, gold_labels)
 
     with open(filename_, 'w') as file_:
         json.dump(res, file_, indent=4)
@@ -251,7 +260,7 @@ def build_evaluation_file(results, args):
     os.unlink(filename_)
     print("Files %s create inside of the file: %s." % (filename_, output_file))
 
-    return grouped_results
+    return grouped_results, acc
 
 def filter_order(order_list):
   filtered_list = []
