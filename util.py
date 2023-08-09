@@ -241,7 +241,7 @@ def build_evaluation_file(results, args):
                 secondary_response = []
                 res[_iid] = {'Primary_evidence_index': primary_response, 'Secondary_evidence_index': secondary_response}
         else:
-            if _evidence_exists(_iid):
+            if _evidence_exists(_iid, results_df):
                 primary_response = filter_order(order_combined_df[_iid][1]['Primary']) if _primary_key_exists(_iid, results_df) else []
             else:
                 primary_response = []
