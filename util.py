@@ -234,10 +234,9 @@ def build_evaluation_file(results, args, stage: str, unlabeled=False):
 
     if not unlabeled and 'gold_evidence_label' not in results.keys():
         raise ValueError("gold_evidence_label not found in results")
-    
-    predicted_labels = results['predicted_evidence']
-    gold_labels = results['gold_evidence_label']
 
+    gold_evidence_labels = None if unlabeled else results['gold_evidence_label']
+    predicted_evidences = results['predicted_evidence']
     results_df = pd.DataFrame(results)
     _iids = results_df.iid.unique().tolist()
 
@@ -263,12 +262,12 @@ def build_evaluation_file(results, args, stage: str, unlabeled=False):
 
         res[_iid] = {'Primary_evidence_index': primary_response}
 
-    acc = None if unlabeled else accuracy_score(predicted_labels, gold_labels)
+    acc = None if unlabeled else accuracy_score(predicted_evidences, gold_evidence_labels)
 
     with open(filename_, 'w') as file_:
         json.dump(res, file_, indent=4)
 
-    output_file = os.path.join(args.save_folder, "_{}_".format(stage) + datetime.now().strftime("%Y%m%d_%H%M%S_%f") + '.zip')
+    output_file = os.path.join(args.save_folder, "{}_".format(stage) + datetime.now().strftime("%Y%m%d_%H%M%S_%f") + '.zip')
     with ZipFile(output_file, 'w') as zipObj:
         zipObj.write(filename_)
     
