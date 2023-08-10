@@ -115,7 +115,8 @@ def add_metrics(dataset_name, bash_size, batch_index, iid_list, predicted_labels
 
     Returns:
     """
-    res["predicted_label"] += predicted_labels.argmax(1).cpu().numpy().tolist()
+    if predicted_labels is not None:
+        res["predicted_label"] += predicted_labels.argmax(1).cpu().numpy().tolist()
     if predicted_evidence is not None:
         res["predicted_evidence"] += predicted_evidence.argmax(1).cpu().numpy().tolist()
 
