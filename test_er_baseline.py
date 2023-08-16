@@ -60,7 +60,7 @@ def main_worker(args):
                                                                               unlabeled,
                                                                               types))
     
-    grouped_df, acc = build_evaluation_file(results, args, "test", unlabeled=True)
+    grouped_df, acc = build_evaluation_file(results, args, stage, unlabeled=True)
 
     with open(args.save_folder + '/{}_{}_{}_grouped_df.pkl'.format(evaluate_dataset,
                                                                    stage, args.model_name), 'wb') as f:
