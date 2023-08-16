@@ -254,13 +254,20 @@ def build_evaluation_file(results, args, stage: str, unlabeled=False):
                 secondary_response = []
 
             res[_iid] = {'Primary_evidence_index': primary_response, 'Secondary_evidence_index': secondary_response}
+            if not primary_response:
+                del results[_iid]
+            elif primary_response and not secondary_response:
+                del results[_iid]
         else:
             if _evidence_exists(_iid, results_df):
                 primary_response = filter_order(order_combined_df[_iid][1]['Primary']) if _primary_key_exists(_iid, results_df) else []
             else:
                 primary_response = []
 
-        res[_iid] = {'Primary_evidence_index': primary_response}
+            res[_iid] = {'Primary_evidence_index': primary_response}
+            
+            if not primary_response:
+                del results[_iid]
 
     acc = None if unlabeled else accuracy_score(predicted_evidences, gold_evidence_labels)
 
