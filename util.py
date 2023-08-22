@@ -111,9 +111,9 @@ def parse_option():
 
     args.model_path = './save/{}_models'.format(args.dataset) if args.dataset_suffix is None \
         else './save/{}_{}_models'.format(args.dataset, args.dataset_suffix)
-    args.model_name = '{}_{}L_len_{}_lr_{}_w_decay_{}_bsz_{}_temp_{}{}'. \
+    args.model_name = '{}_{}L_len_{}_lr_{}_w_decay_{}_bsz_{}_temp_{}{}_{}'. \
         format(args.model_name, args.num_classes, args.max_seq_length,
-               args.learning_rate, args.weight_decay, args.batch_size, args.temp,
+               args.learning_rate, args.weight_decay, args.batch_size, args.temp, args.evaluation_metric[:2],
                '_er' if args.evidence_retrieval else '')
 
     args.start_epoch = 0
