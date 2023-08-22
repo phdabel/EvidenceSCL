@@ -1,8 +1,7 @@
 import os
 import time
 
-from pipeline.util import AverageMeter, ProgressMeter, get_lr
-from sklearn.metrics import accuracy_score
+from pipeline.util import AverageMeter, ProgressMeter, get_lr, compute_metric
 from .util import add_metrics, create_metrics_dict
 
 import torch
@@ -14,7 +13,7 @@ def train(dataloader, model, criterion, optimizer, scheduler, epoch, args, extra
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':1.5f')
     learning = AverageMeter('Learning Rate', ':1.7f')
-    top = AverageMeter('Accuracy', ':1.3f')
+    top = AverageMeter(args.evaluation_metric.capitalize(), ':1.3f')
     progress = ProgressMeter(
         len(dataloader),
         [batch_time, data_time, learning, losses, top],
@@ -69,8 +68,11 @@ def train(dataloader, model, criterion, optimizer, scheduler, epoch, args, extra
         loss.backward()
 
         # update metrics
-        acc = accuracy_score(true_labels.cpu().numpy(), predicted_labels.argmax(1).cpu().numpy())
-        top.update(acc, bsz)
+        _metric = compute_metric(true_labels=true_labels.cpu().numpy(),
+                                 predicted_labels=predicted_labels.argmax(1).cpu().numpy(),
+                                 args=args)
+
+        top.update(_metric, bsz)
         learning.update(get_lr(optimizer), bsz)
 
         if ((idx + 1) % args.gradient_accumulation_steps == 0) or ((idx + 1) == len(dataloader)):
@@ -92,7 +94,7 @@ def train(dataloader, model, criterion, optimizer, scheduler, epoch, args, extra
 def validate(dataloader, model, criterion, epoch, args, extra_info=None):
     batch_time = AverageMeter('Time', ':6.3f')
     losses = AverageMeter('Loss', ':1.5f')
-    top = AverageMeter('Accuracy', ':2.3f')
+    top = AverageMeter(args.evaluation_metric.capitalize(), ':2.3f')
     progress = ProgressMeter(
         len(dataloader),
         [batch_time, losses, top],
@@ -140,8 +142,10 @@ def validate(dataloader, model, criterion, epoch, args, extra_info=None):
                 loss /= args.gradient_accumulation_steps
 
             losses.update(loss.item(), bsz)
-            acc = accuracy_score(true_labels.cpu().numpy(), predicted_labels.argmax(1).cpu().numpy())
-            top.update(acc, bsz)
+            _metric = compute_metric(true_labels=true_labels.cpu().numpy(),
+                                     predicted_labels=predicted_labels.argmax(1).cpu().numpy(),
+                                     args=args)
+            top.update(_metric, bsz)
 
             batch_time.update(time.time() - end)
             end = time.time()

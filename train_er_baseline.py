@@ -17,11 +17,11 @@ from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 
 warnings.filterwarnings("ignore")
 __MODEL_SLUG__ = 'biomed'
-best_val_acc = None
+best_val_metric = None
 
 
 def main_worker(gpu, args):
-    global best_val_acc
+    global best_val_metric
     best_val_results = None
     args.gpu = gpu
 
@@ -61,57 +61,62 @@ def main_worker(gpu, args):
     val_genres = dataloader_struct['genres']['validation']
     val_types = dataloader_struct['types']['validation']
 
-    epoch, val_semeval_acc, train_agg_results = None, None, None
+    epoch, val_semeval_metric, train_agg_results = None, None, None
     for epoch in range(args.epochs):
         time1 = time.time()
-        train_loss, train_acc, train_result = train_roberta(training_loader, classifier, criterion, optimizer,
-                                                            scheduler, epoch, args,
-                                                            extra_info=(train_iids,
-                                                                        train_trials,
-                                                                        train_orders,
-                                                                        train_genres,
-                                                                        train_types))
+        train_loss, train_metric, train_result = train_roberta(training_loader, classifier, criterion, optimizer,
+                                                               scheduler, epoch, args,
+                                                               extra_info=(train_iids,
+                                                                           train_trials,
+                                                                           train_orders,
+                                                                           train_genres,
+                                                                           train_types))
         time2 = time.time()
         print('Training epoch {}, total time {:.2f}, loss {:.7f}'.format(epoch, (time2 - time1), train_loss))
 
         val_time1 = time.time()
-        val_loss, val_acc, val_result = validate_roberta(validation_loader, classifier, criterion, epoch, args,
-                                                         extra_info=(val_iids,
-                                                                     val_trials,
-                                                                     val_orders,
-                                                                     val_genres,
-                                                                     val_types))
+        val_loss, val_metric, val_result = validate_roberta(validation_loader, classifier, criterion, epoch, args,
+                                                            extra_info=(val_iids,
+                                                                        val_trials,
+                                                                        val_orders,
+                                                                        val_genres,
+                                                                        val_types))
         val_time2 = time.time()
         print('Validation epoch {}, total time {:.2f}, loss {:.7f}'.format(epoch, (val_time2 - val_time1),
                                                                            val_loss))
 
-        # compute real accuracy for nli4ct
+        # compute metric for nli4ct ER task
         if args.dataset == 'nli4ct':
             train_results_df, \
-                train_semeval_acc = build_evaluation_file(train_result, args, 'training')
+                train_semeval_metric = build_evaluation_file(train_result, args, 'training')
 
-            train_semeval_acc = torch.tensor([train_semeval_acc], dtype=torch.float32)
+            train_semeval_metric = torch.tensor([train_semeval_metric], dtype=torch.float32)
 
             val_results_df, \
-                val_semeval_acc = build_evaluation_file(val_result, args, 'validation')
+                val_semeval_metric = build_evaluation_file(val_result, args, 'validation')
 
-            val_semeval_acc = torch.tensor([val_semeval_acc], dtype=torch.float32)
+            val_semeval_metric = torch.tensor([val_semeval_metric], dtype=torch.float32)
 
-            train_acc = train_semeval_acc
-            val_acc = val_semeval_acc
+            train_metric = train_semeval_metric
+            val_metric = val_semeval_metric
 
-        if best_val_acc is None or val_acc > best_val_acc:
-            best_val_acc = val_acc
-            print("New best accuracy: {:.3f}".format(best_val_acc.item()))
+        if best_val_metric is None or val_metric > best_val_metric:
+            best_val_metric = val_metric
+            print("New best {}: {:.3f}".format(args.evaluation_metric, best_val_metric.item()))
             save_file = os.path.join(args.save_folder, 'classifier_best.pth')
-            save_model(classifier, optimizer, args, epoch, best_val_acc, save_file)
+            save_model(classifier, optimizer, args, epoch, best_val_metric, save_file)
 
         # display epoch summary
-        epoch_summary(args.model_name, epoch, train_acc.item(), val_acc.item(), best_val_acc.item())
+        epoch_summary(model_name=args.model_name,
+                      epoch=epoch,
+                      training_semeval_metric=train_metric.item(),
+                      validation_semeval_metric=val_metric.item(),
+                      best_validation_metric=best_val_metric.item(),
+                      metric_name=args.evaluation_metric)
 
     # save the last model
     save_file = os.path.join(args.save_folder, 'classifier_last.pth')
-    save_model(classifier, optimizer, args, epoch, val_acc, save_file)
+    save_model(classifier, optimizer, args, epoch, val_metric, save_file)
 
     with open(args.save_folder + '/train_results_' + args.model_name + '.pkl', 'wb') as f:
         pickle.dump(train_result, f)

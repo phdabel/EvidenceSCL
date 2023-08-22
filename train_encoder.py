@@ -14,7 +14,7 @@ import torch.utils.data
 import torch.utils.data.distributed
 from torch.optim import AdamW
 
-from util import save_model, parse_option, get_dataloaders, epoch_summary, compute_real_accuracy, generate_results_file
+from util import save_model, parse_option, get_dataloaders, epoch_summary, compute_nli4ct_nli_metric, generate_results_file
 from pipeline.encoder_pipeline import train as train_encoder, validate as validate_encoder
 
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
@@ -109,7 +109,7 @@ def main_worker(gpu, args):
         time2 = time.time()
         print('epoch {}, total time {:.2f}, loss {:.7f}'.format(epoch, (time2 - time1), train_loss))
         train_loss = torch.tensor([train_loss], dtype=torch.float32)
-        train_semeval_maj_acc, train_semeval_at_least_one_acc, train_agg_results = compute_real_accuracy(train_res)
+        train_semeval_maj_acc, train_semeval_at_least_one_acc, train_agg_results = compute_nli4ct_nli_metric(train_res)
         train_semeval_acc = max(train_semeval_maj_acc, train_semeval_at_least_one_acc)
 
         # evaluate on validation set
@@ -123,7 +123,7 @@ def main_worker(gpu, args):
         print('Validation epoch {}, total time {:.2f}, validation loss {:.7f}'.format(epoch, (val_time2 - val_time1),
                                                                                       val_loss))
         val_loss = torch.tensor([val_loss], dtype=torch.float32)
-        val_semeval_maj_acc, val_semeval_at_least_one_acc, val_agg_results = compute_real_accuracy(val_res)
+        val_semeval_maj_acc, val_semeval_at_least_one_acc, val_agg_results = compute_nli4ct_nli_metric(val_res)
         val_semeval_acc = max(val_semeval_maj_acc, val_semeval_at_least_one_acc)
 
         if minimal_loss is None or val_loss < minimal_loss:

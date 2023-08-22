@@ -1,3 +1,6 @@
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+
+
 def get_lr(optimizer):
     for param_group in optimizer.param_groups:
         return param_group['lr']
@@ -136,3 +139,15 @@ def add_metrics(dataset_name, bash_size, batch_index, iid_list, predicted_labels
         res["itype"] += itype_list[offset:offset + bash_size]
     elif dataset_name == 'multinli':
         res["genre"] += genres_list[offset:offset + bash_size]
+
+
+def compute_metric(true_labels, predicted_labels, args):
+    _average = 'binary' if args.num_classes == 2 else 'macro'
+    if args.evaluation_metric == 'f1':
+        return f1_score(true_labels, predicted_labels, average=_average)
+    elif args.evaluation_metric == 'precision':
+        return precision_score(true_labels, predicted_labels, average=_average)
+    elif args.evaluation_metric == 'recall':
+        return recall_score(true_labels, predicted_labels, average=_average)
+
+    return accuracy_score(true_labels, predicted_labels, average=_average)
