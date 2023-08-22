@@ -1,8 +1,6 @@
 import time
-import pickle
 import torch
-from .util import AverageMeter, ProgressMeter, add_metrics, create_metrics_dict
-from sklearn.metrics import accuracy_score
+from .util import AverageMeter, ProgressMeter, add_metrics, create_metrics_dict, compute_metric
 
 __NLI4CT_SLUG__ = "nli4ct"
 
@@ -20,7 +18,7 @@ def run_classifier_test(dataloader, classifier, args, extra=None):
     """
     iids, trials, sentence_orders, genre_list, unlabeled, types = extra
     batch_time = AverageMeter('Time', ':6.3f')
-    top = AverageMeter('Accuracy', ':1.3f')
+    top = AverageMeter(args.evaluation_metric.capitalize(), ':1.3f')
     progress = ProgressMeter(
         len(dataloader),
         [batch_time, top])
@@ -58,8 +56,11 @@ def run_classifier_test(dataloader, classifier, args, extra=None):
                         gold_evidence_label=true_er_labels)
 
             if extra is not None and not unlabeled:
-                acc = accuracy_score(true_labels.cpu().numpy(), predictions.argmax(1).cpu().numpy())
-                top.update(acc, bsz)
+                metric = compute_metric(true_labels=true_labels.cpu().numpy(),
+                                        predicted_labels=predictions.argmax(1).cpu().numpy(),
+                                        args=args)
+
+                top.update(metric, bsz)
 
             batch_time.update(time.time() - end)
             end = time.time()

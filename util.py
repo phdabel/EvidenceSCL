@@ -5,12 +5,12 @@ import pandas as pd
 import argparse
 from datetime import datetime
 
+from pipeline.util import compute_metric
 import torch
 import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
 from typing import Optional
 from statistics import mode
-from sklearn.metrics import accuracy_score
 from zipfile import ZipFile
 
 
@@ -56,6 +56,9 @@ def parse_option():
                              "If None, the dataset will be the same as the training dataset.")
     parser.add_argument('--evaluate_stage', type=str, default='test', choices=['training', 'validation', 'test'],
                         help="Informs dataset's stage that will be used for evaluation (default: test).")
+    parser.add_argument('--evaluation_metric', type=str, default='accuracy', choices=['accuracy', 'f1', 'precision',
+                                                                                      'recall'],
+                        help="Evaluation metric (default: accuracy).")
 
     # training
     parser.add_argument('--workers', default=2, type=int, metavar='N',
@@ -132,12 +135,12 @@ def parse_option():
     return args
 
 
-def compute_real_accuracy(results, args, stage, unlabeled=False):
+def compute_nli4ct_nli_metric(results, args, stage, unlabeled=False):
     """
     Compute accuracy for SemEval-2023 Task 7.
 
-    Group the results by the instance id (iid) and trial and computes the accuracy based on the majority label or
-        the presence of at least one entailment label within the predictions.
+    Group the results by the instance id (iid) and trial and computes the metric (f1, precision, accuracy, or recall)
+     based on the majority label or the presence of at least one entailment label within the predictions.
 
     Args:
         results: dictionary
@@ -146,8 +149,8 @@ def compute_real_accuracy(results, args, stage, unlabeled=False):
         unlabeled: boolean (if True, the gold_label must be present in the results)
 
     Returns:
-        maj_acc: float (accuracy based on the majority label by iid)
-        alo_acc: float (accuracy based on the presence of at least one entailment label by iid)
+        maj_metric: float (metric based on the majority label by iid)
+        alo_metric: float (metric based on the presence of at least one entailment label by iid)
 
     """
     keys_to_remove = [key for key in results.keys() if len(results[key]) == 0]
@@ -165,7 +168,7 @@ def compute_real_accuracy(results, args, stage, unlabeled=False):
 
     # remove neutral labels
     results_df.drop([i for i, _ in results_df[results_df.predicted_label == 2].iterrows()], inplace=True)
-    maj_acc, alo_acc = None, None
+    maj_metric, alo_metric = None, None
     grouped_results = results_df.groupby(['iid', 'trial']).aggregate(list)
     struct_maj = dict()
     struct_alo = dict()
@@ -188,13 +191,13 @@ def compute_real_accuracy(results, args, stage, unlabeled=False):
             struct_glb[_iid] = mode(grouped_results[grouped_results.index == (_iid, 'Primary')].gold_label.tolist()[0])
 
     if not unlabeled:
-        maj_acc = accuracy_score(list(struct_glb.values()), list(struct_maj.values()))
-        alo_acc = accuracy_score(list(struct_glb.values()), list(struct_alo.values()))
+        maj_metric = compute_metric(list(struct_glb.values()), list(struct_maj.values()), args.metric)
+        alo_metric = compute_metric(list(struct_glb.values()), list(struct_alo.values()), args.metric)
 
     generate_results_file(struct_maj, args, 'maj_{}_'.format(stage))
     generate_results_file(struct_alo, args, 'alo_{}_'.format(stage))
 
-    return maj_acc, alo_acc, grouped_results
+    return maj_metric, alo_metric, grouped_results
 
 
 def generate_results_file(struct, args, prefix):
@@ -269,7 +272,9 @@ def build_evaluation_file(results, args, stage: str, unlabeled=False):
             if not primary_response:
                 del res[_iid]
 
-    acc = None if unlabeled else accuracy_score(predicted_evidences, gold_evidence_labels)
+    metric = None if unlabeled else compute_metric(predicted_labels=predicted_evidences,
+                                                   true_labels=gold_evidence_labels,
+                                                   args=args)
 
     with open(filename_, 'w') as file_:
         json.dump(res, file_, indent=4)
@@ -281,7 +286,7 @@ def build_evaluation_file(results, args, stage: str, unlabeled=False):
     os.unlink(filename_)
     print("Files %s create inside of the file: %s." % (filename_, output_file))
 
-    return grouped_results, acc
+    return grouped_results, metric
 
 
 def filter_order(order_list):

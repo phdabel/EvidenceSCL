@@ -3,7 +3,7 @@ import os
 import pickle
 import torch
 import warnings
-from util import parse_option, get_dataloaders, generate_results_file, compute_real_accuracy
+from util import parse_option, get_dataloaders, generate_results_file, compute_nli4ct_nli_metric
 
 import torch.backends.cudnn as cudnn
 from transformers import RobertaTokenizer, RobertaModel
@@ -61,7 +61,7 @@ def main_worker(args):
                                                                               types))
 
     if evaluate_dataset == 'nli4ct':
-        _, _, grouped_df = compute_real_accuracy(results, args, stage, unlabeled=unlabeled)
+        _, _, grouped_df = compute_nli4ct_nli_metric(results, args, stage, unlabeled=unlabeled)
 
         # save grouped_df in pickle file for further analysis (nli4ct only)
         with open(args.save_folder + '/{}_{}_{}_grouped_df.pkl'.format(evaluate_dataset,
@@ -73,9 +73,9 @@ def main_worker(args):
         pickle.dump(results, f)
 
     if accuracy is not None:
-        print("Test accuracy of the model: {:2.3}".format(accuracy))
+        print("Test {} of the model: {:2.3}".format(args.evaluation_metric, accuracy))
     else:
-        print("Test accuracy of the model: N/A")
+        print("Test {} of the model: N/A".format(args.evaluation_metric))
 
 
 if __name__ == '__main__':
