@@ -3,7 +3,7 @@ import os
 import pickle
 import torch
 import warnings
-from util import parse_option, get_dataloaders, generate_results_file, compute_nli4ct_nli_metric
+from util import parse_option, get_dataloaders, compute_nli4ct_nli_metric
 
 import torch.backends.cudnn as cudnn
 from transformers import RobertaTokenizer, RobertaModel

@@ -81,21 +81,25 @@ class ProgressMeter(object):
 
 
 def create_metrics_dict():
-    return {"iid": [],
-            "predicted_label": [],
-            "trial": [],
-            "itype": [],
-            "genre": [],
-            "order_": [],
-            "gold_label": [],
-            "predicted_evidence": [],
-            "gold_evidence_label": [],
-            "logits": []}.copy()
+    return {"iid": [],                  # instance id
+            "predicted_label": [],      # predicted label
+            "review": [],               # review id           (robin dataset)
+            "study": [],                # study id            (robin dataset)
+            "type": [],                 # type id             (robin dataset)
+            "trial": [],                # trial id            (nli4ct dataset)
+            "itype": [],                # instance type       (nli4ct dataset)
+            "genre": [],                # genre               (multinli dataset)
+            "order_": [],               # order               (nli4ct dataset)
+            "gold_label": [],           # gold label
+            "predicted_evidence": [],   # predicted evidence  (nli4ct dataset)
+            "gold_evidence_label": [],  # gold evidence label (nli4ct dataset)
+            "logits": []                # logits
+            }.copy()
 
 
-def add_metrics(dataset_name, bash_size, batch_index, iid_list, predicted_labels, true_labels, res, logits=None,
+def add_metrics(dataset_name, batch_size, batch_index, iid_list, predicted_labels, true_labels, res, logits=None,
                 order_list=None, trial_list=None, itype_list=None, genres_list=None, unlabeled=False,
-                predicted_evidence=None, gold_evidence_label=None):
+                predicted_evidence=None, gold_evidence_label=None, review_list=None, study_list=None, type_list=None):
     """
     Add metrics to the res dictionary.
 
@@ -105,11 +109,11 @@ def add_metrics(dataset_name, bash_size, batch_index, iid_list, predicted_labels
         genres_list:
         logits:
         dataset_name: str
-        bash_size: int
+        batch_size: int
         batch_index: int
         iid_list: list
-        predicted_labels: tensor. shape: (bash_size, num_classes)
-        true_labels: tensor.shape: (bash_size, )
+        predicted_labels: tensor. shape: (batch_size, num_classes)
+        true_labels: tensor.shape: (batch_size, )
         res: dict
         order_list: list
         trial_list: list
@@ -131,14 +135,23 @@ def add_metrics(dataset_name, bash_size, batch_index, iid_list, predicted_labels
     if logits is not None:
         res["logits"] += logits.cpu().numpy().tolist()
 
-    offset = batch_index * bash_size
-    res["iid"] += iid_list[offset:offset + bash_size]
+    offset = batch_index * batch_size
+
     if dataset_name == "nli4ct":
-        res["trial"] += trial_list[offset:offset + bash_size]
-        res["order_"] += order_list[offset:offset + bash_size]
-        res["itype"] += itype_list[offset:offset + bash_size]
+        res["trial"] += trial_list[offset:offset + batch_size]
+        res["order_"] += order_list[offset:offset + batch_size]
+        res["itype"] += itype_list[offset:offset + batch_size]
     elif dataset_name == 'multinli':
-        res["genre"] += genres_list[offset:offset + bash_size]
+        res["genre"] += genres_list[offset:offset + batch_size]
+    elif dataset_name == 'robin':
+        res["review"] += review_list[offset:offset + batch_size]
+        res["study"] += study_list[offset:offset + batch_size]
+        res["type"] += type_list[offset:offset + batch_size]
+
+    if dataset_name == 'robin':
+        res["iid"] += iid_list.cpu().numpy().tolist()
+    else:
+        res["iid"] += iid_list[offset:offset + batch_size]
 
 
 def compute_metric(true_labels, predicted_labels, args):

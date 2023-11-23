@@ -51,7 +51,7 @@ def parse_option():
                         help='Path to the pre-trained encoder checkpoint (default: None)')
 
     # evaluation
-    parser.add_argument('--evaluate_dataset', type=str, default=None, choices=['nli4ct', 'mednli', 'multinli'],
+    parser.add_argument('--evaluate_dataset', type=str, default=None, choices=['nli4ct', 'mednli', 'multinli', 'robin'],
                         help="Dataset name to evaluate the model (default: None). "
                              "If None, the dataset will be the same as the training dataset.")
     parser.add_argument('--evaluate_stage', type=str, default='test', choices=['training', 'validation', 'test'],
@@ -321,15 +321,15 @@ def get_dataframes(dataset, data_folder, num_classes, task='nli'):
     if dataset == 'nli4ct' and task == 'nli':
         # NLI4CT dataset uses 2 labels even though the model has 3 classes
         print("Loading NLI Dataset")
-        train_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', "nli4ct_2L_train.pkl"))
-        val_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', "nli4ct_2L_val.pkl"))
-        test_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', 'nli4ct_2L_test.pkl'))
+        train_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', "nli4ct_2L_nli_train.pkl"))
+        val_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', "nli4ct_2L_nli_val.pkl"))
+        test_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', 'nli4ct_2L_nli_test.pkl'))
     elif dataset == 'nli4ct' and task == 'ir':
         # NLI4CT dataset uses 2 labels even though the model has 3 classes
         print("Loading Evidence Retrieval Dataset")
         train_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', "nli4ct_2L_ir_train.pkl"))
         val_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', "nli4ct_2L_ir_val.pkl"))
-        test_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', 'nli4ct_2L_test.pkl'))
+        test_df = pd.read_pickle(os.path.join(data_folder, 'nli4ct', 'nli4ct_2L_nli_test.pkl'))
     elif dataset == 'mednli':
         train_df = pd.read_pickle(os.path.join(data_folder, 'mednli', "mednli_%dL_train.pkl" % num_classes))
         val_df = pd.read_pickle(os.path.join(data_folder, 'mednli', "mednli_%dL_val.pkl" % num_classes))
@@ -341,6 +341,10 @@ def get_dataframes(dataset, data_folder, num_classes, task='nli'):
                                              "multi_nli_%dL_val.pkl" % num_classes))
         test_df = pd.read_pickle(os.path.join(data_folder, 'multi_nli',
                                               "multi_nli_%dL_test.pkl" % num_classes))
+    elif dataset == 'rob':
+        train_df = pd.read_csv(os.path.join(data_folder, 'rob_cdsr', "train.csv"))
+        val_df = pd.read_csv(os.path.join(data_folder, 'rob_cdsr', "val.csv"))
+        test_df = pd.read_csv(os.path.join(data_folder, 'rob_cdsr', "test.csv"))
     elif dataset == 'local':
         train_df = pd.read_pickle(os.path.join(data_folder, 'local', "train_local.pkl"))
         val_df = pd.read_pickle(os.path.join(data_folder, 'local', "dev_local.pkl"))
@@ -371,6 +375,43 @@ def get_token_type_ids(features: torch.Tensor, eos_token_id, max_seq_length=128)
         all_token_type_ids.append(pair_attention_ + padding_)
 
     return torch.tensor(all_token_type_ids)
+
+
+def get_rob_dataset_from_dataframe(dataframe, tokenizer, max_seq_length: Optional[int] = None):
+    
+    if max_seq_length is None:
+        max_seq_length = tokenizer.model_max_length
+
+    class_dict = {'HIGH': 0, 'LOW': 1, 'UNCLEAR': 2}
+
+    inputs = tokenizer.batch_encode_plus([row.name + ' ' + row.description for _, row in dataframe.iterrows()],
+                                         add_special_tokens=True,
+                                         padding='max_length',
+                                         truncation=True,
+                                         max_length=max_seq_length,
+                                         return_token_type_ids=False,
+                                         return_attention_mask=True,
+                                         return_tensors='pt')
+    
+    all_token_type_ids = get_token_type_ids(inputs['input_ids'],
+                                            tokenizer.eos_token_id,
+                                            max_seq_length)
+    
+    class_labels = torch.tensor([class_dict[row.rob_judgment] for _, row in dataframe.iterrows()], dtype=torch.long)
+
+    all_ids = torch.tensor([idx for idx in dataframe.index], dtype=torch.long)
+    all_reviews = [row.review.split(os.sep)[-1][:8] for _, row in dataframe.iterrows()]
+    all_studies = [row.study_id for _, row in dataframe.iterrows()]
+    all_types = [row.id for _, row in dataframe.iterrows()]
+
+    dataset = TensorDataset(inputs['input_ids'],
+                            inputs['attention_mask'],
+                            all_token_type_ids,
+                            class_labels,
+                            all_ids)
+    
+    return dataset, all_reviews, all_studies, all_types
+
 
 
 def get_dataset_from_dataframe(dataframe, tokenizer, max_seq_length: Optional[int] = None, unlabeled=False):
@@ -426,6 +467,37 @@ def get_dataset_from_dataframe(dataframe, tokenizer, max_seq_length: Optional[in
                             evidence_labels)
 
     return dataset, all_uuids, all_iid, all_trials, all_orders, all_genres, all_types
+
+
+def get_rob_dataloaders(dataset, data_folder, tokenizer, batch_size, workers, max_seq_length, num_classes):
+    train_df, val_df, test_df = get_dataframes(dataset, data_folder, num_classes, task='nli')
+    train_dataset, train_reviews, train_studies, train_types = get_rob_dataset_from_dataframe(train_df, tokenizer, max_seq_length)
+    val_dataset, val_reviews, val_studies, val_types = get_rob_dataset_from_dataframe(val_df, tokenizer, max_seq_length)
+    test_dataset, test_reviews, test_studies, test_types = get_rob_dataset_from_dataframe(test_df, tokenizer, max_seq_length)
+
+    training_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False,
+                                num_workers=workers, pin_memory=True)
+    validation_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False,
+                                   num_workers=workers, pin_memory=True)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False,
+                            num_workers=workers, pin_memory=True)
+    
+    return {'loader': {'training': training_loader,
+                        'validation': validation_loader,
+                        'test': test_loader},
+            'reviews': {
+                'training': train_reviews,
+                'validation': val_reviews,
+                'test': test_reviews},
+            'studies': {
+                'training': train_studies,
+                'validation': val_studies,
+                'test': test_studies},
+            'types': {
+                'training': train_types,
+                'validation': val_types,
+                'test': test_types}
+            }
 
 
 def get_dataloaders(dataset, data_folder, tokenizer, batch_size, workers, max_seq_length, num_classes, task='nli'):

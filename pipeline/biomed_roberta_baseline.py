@@ -44,7 +44,7 @@ def train(dataloader, model, criterion, optimizer, scheduler, epoch, args, extra
         true_er_labels = batch[4].view(-1)
 
         # add metrics to res dictionary
-        add_metrics(dataset_name=args.dataset, bash_size=bsz, batch_index=idx, iid_list=iid_list,
+        add_metrics(dataset_name=args.dataset, batch_size=bsz, batch_index=idx, iid_list=iid_list,
                     predicted_labels=predicted_labels if args.task == 'nli' else None,
                     true_labels=true_nli_labels,
                     res=res, logits=None,
@@ -126,7 +126,7 @@ def validate(dataloader, model, criterion, epoch, args, extra_info=None):
             true_er_labels = batch[4].view(-1)
 
             # add metrics to res dictionary
-            add_metrics(dataset_name=args.dataset, bash_size=bsz, batch_index=idx, iid_list=iid_list,
+            add_metrics(dataset_name=args.dataset, batch_size=bsz, batch_index=idx, iid_list=iid_list,
                         predicted_labels=predicted_labels if args.task == 'nli' else None,
                         true_labels=true_nli_labels,
                         res=res, logits=None,

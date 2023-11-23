@@ -47,7 +47,7 @@ def run_classifier_test(dataloader, classifier, args, extra=None):
             # add metrics to res dictionary
             evaluate_dataset = args.evaluate_dataset if args.evaluate_dataset is not None else args.dataset
 
-            add_metrics(dataset_name=evaluate_dataset, bash_size=bsz, batch_index=idx, iid_list=iids,
+            add_metrics(dataset_name=evaluate_dataset, batch_size=bsz, batch_index=idx, iid_list=iids,
                         predicted_labels=predictions if args.task == 'nli' else None,
                         true_labels=true_nli_labels,
                         res=res, logits=logits, order_list=sentence_orders, trial_list=trials, itype_list=types,
