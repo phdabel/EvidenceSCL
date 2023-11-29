@@ -384,7 +384,7 @@ def get_rob_dataset_from_dataframe(dataframe, tokenizer, max_seq_length: Optiona
 
     class_dict = {'HIGH': 0, 'LOW': 1, 'UNCLEAR': 2}
 
-    inputs = tokenizer.batch_encode_plus([row.name + ' ' + row.description for _, row in dataframe.iterrows()],
+    inputs = tokenizer.batch_encode_plus([(row['name'], row.support_judgment_str) for _, row in dataframe.iterrows()],
                                          add_special_tokens=True,
                                          padding='max_length',
                                          truncation=True,
@@ -411,7 +411,6 @@ def get_rob_dataset_from_dataframe(dataframe, tokenizer, max_seq_length: Optiona
                             all_ids)
     
     return dataset, all_reviews, all_studies, all_types
-
 
 
 def get_dataset_from_dataframe(dataframe, tokenizer, max_seq_length: Optional[int] = None, unlabeled=False):
