@@ -28,7 +28,7 @@ def parse_option():
                         help='Model name (default: evidencescl)')
     parser.add_argument('--evidence_retrieval', action='store_true', default=False,
                         help='Use evidence retrieval model to select the evidence sentences.')
-    parser.add_argument('--dataset', type=str, default='nli4ct', choices=['nli4ct', 'mednli', 'multinli', 'local'],
+    parser.add_argument('--dataset', type=str, default='nli4ct', choices=['nli4ct', 'mednli', 'multinli', 'local', 'rob'],
                         help='Dataset name (default: nli4ct)')
     parser.add_argument('--dataset_suffix', type=str, default=None,
                         help="Extra information to be added in the dataset's name (default: None). "
@@ -51,7 +51,7 @@ def parse_option():
                         help='Path to the pre-trained encoder checkpoint (default: None)')
 
     # evaluation
-    parser.add_argument('--evaluate_dataset', type=str, default=None, choices=['nli4ct', 'mednli', 'multinli', 'robin'],
+    parser.add_argument('--evaluate_dataset', type=str, default=None, choices=['nli4ct', 'mednli', 'multinli', 'rob'],
                         help="Dataset name to evaluate the model (default: None). "
                              "If None, the dataset will be the same as the training dataset.")
     parser.add_argument('--evaluate_stage', type=str, default='test', choices=['training', 'validation', 'test'],
