@@ -18,7 +18,7 @@ do
       for max_seq_length in 128
       do
         echo "Dataset: $dataset, learning rate $learning_rate, $num_classes classes and $max_seq_length max_seq_length"
-        python train_rob_baseline.py --dataset "$dataset" --max_seq_length "$max_seq_length" --num_classes "$num_classes" --model_name biomed --batch_size "$BATCH_SIZE" --gradient_accumulation_steps "$GRADIENT_ACCUMULATION_STEPS" --epochs "$EPOCHS"  --workers "$WORKERS" --learning_rate "$learning_rate"
+        python train_rob_baseline.py --dataset "$dataset" --max_seq_length "$max_seq_length" --num_classes "$num_classes" --model_name biomed --batch_size "$BATCH_SIZE" --gradient_accumulation_steps "$GRADIENT_ACCUMULATION_STEPS" --epochs "$EPOCHS" --evaluation_metric f1 --workers "$WORKERS" --learning_rate "$learning_rate"
       done
     done
   done

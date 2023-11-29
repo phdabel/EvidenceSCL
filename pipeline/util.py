@@ -163,4 +163,4 @@ def compute_metric(true_labels, predicted_labels, args):
     elif args.evaluation_metric == 'recall':
         return recall_score(true_labels, predicted_labels, average=_average)
 
-    return accuracy_score(true_labels, predicted_labels, average=_average)
+    return accuracy_score(true_labels, predicted_labels)
